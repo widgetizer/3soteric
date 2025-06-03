@@ -272,19 +272,20 @@ function preGenerateAllBlockTextures(scene) {
         );
 
         const gfxL = scene.add.graphics();
-        gfxL.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
+        const tileColor = Phaser.Display.Color.HexStringToColor(color).color;
+        gfxL.fillStyle(tileColor, 1);
         gfxL.fillRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
         gfxL.lineStyle(1, 0x333333, 0.8);
         gfxL.strokeRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
         gfxL.fillStyle(Phaser.Display.Color.BLACK, 0.15);
 
-        const FOO = 6;
+        const bevelInset = 6;
 
         gfxL.fillRoundedRect(
-          FOO,
-          FOO,
-          BLOCK_SIZE - FOO * 2,
-          BLOCK_SIZE - FOO * 2,
+          bevelInset,
+          bevelInset,
+          BLOCK_SIZE - bevelInset * 2,
+          BLOCK_SIZE - bevelInset * 2,
           radii,
         );
 
@@ -298,13 +299,14 @@ function preGenerateAllBlockTextures(scene) {
         gfxR.fillRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
 
         // Top-left highlight
+        const bevel = 0.2;
         gfxR.lineStyle(0);
         gfxR.fillStyle(0xffffff, 0.28);
         gfxR.beginPath();
         gfxR.moveTo(0, 0);
         gfxR.lineTo(BLOCK_SIZE, 0);
-        gfxR.lineTo(BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.3);
-        gfxR.lineTo(BLOCK_SIZE * 0.3, BLOCK_SIZE * 0.3);
+        gfxR.lineTo(BLOCK_SIZE * (1 - bevel), BLOCK_SIZE * bevel);
+        gfxR.lineTo(BLOCK_SIZE * bevel, BLOCK_SIZE * bevel);
         gfxR.lineTo(0, 0);
         gfxR.closePath();
         gfxR.fillPath();
@@ -314,8 +316,8 @@ function preGenerateAllBlockTextures(scene) {
         gfxR.beginPath();
         gfxR.moveTo(BLOCK_SIZE, BLOCK_SIZE);
         gfxR.lineTo(0, BLOCK_SIZE);
-        gfxR.lineTo(BLOCK_SIZE * 0.3, BLOCK_SIZE * 0.7);
-        gfxR.lineTo(BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.7);
+        gfxR.lineTo(BLOCK_SIZE * bevel, BLOCK_SIZE * (1 - bevel));
+        gfxR.lineTo(BLOCK_SIZE * (1 - bevel), BLOCK_SIZE * (1 - bevel));
         gfxR.lineTo(BLOCK_SIZE, BLOCK_SIZE);
         gfxR.closePath();
         gfxR.fillPath();
@@ -1007,7 +1009,9 @@ let userPaused = false;
 
 function create() {
   // Initialize/reset game state
-  board = Array(ROWS).fill().map(() => Array(COLS).fill(null));
+  board = Array(ROWS)
+    .fill()
+    .map(() => Array(COLS).fill(null));
   dropTimerLeft = 0;
   dropTimerRight = 0;
   lastLockTime = 0;
@@ -1015,7 +1019,7 @@ function create() {
   ambiClearRows = [];
   paused = false;
   userPaused = false;
-  
+
   // Pre-generate all tetromino block textures
   preGenerateAllBlockTextures(this);
 

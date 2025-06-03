@@ -20,237 +20,1167 @@
         <script src="ambitetris.js"></script>
         <script>
             // Game states
-            let gameState = "title"; // Can be "title" or "playing"
+            let gameState = "title"; // Can be "title", "settings", or "playing"
+
+            // We'll use existing variables from ambitetris.js:
+            // board, cursorsLeft, cursorsRight, leftTetromino, rightTetromino,
+            // leftGhostTetromino, rightGhostTetromino, dropTimerLeft, dropTimerRight,
+            // fastDropLeft, fastDropRight, moveTimers, leftKeysHeld, userPaused
+
+            // Load saved key bindings or use defaults
+            let keyBindings;
+
+            // Try to load saved key bindings
+            if (
+                window.localStorage &&
+                localStorage.getItem("ambitetrisKeyBindings")
+            ) {
+                try {
+                    keyBindings = JSON.parse(
+                        localStorage.getItem("ambitetrisKeyBindings"),
+                    );
+
+                    // Ensure all key names are uppercase for consistent comparison
+                    keyBindings.leftTetromino.left =
+                        keyBindings.leftTetromino.left.toUpperCase();
+                    keyBindings.leftTetromino.right =
+                        keyBindings.leftTetromino.right.toUpperCase();
+                    keyBindings.leftTetromino.down =
+                        keyBindings.leftTetromino.down.toUpperCase();
+                    keyBindings.leftTetromino.rotate =
+                        keyBindings.leftTetromino.rotate.toUpperCase();
+
+                    keyBindings.rightTetromino.left =
+                        keyBindings.rightTetromino.left.toUpperCase();
+                    keyBindings.rightTetromino.right =
+                        keyBindings.rightTetromino.right.toUpperCase();
+                    keyBindings.rightTetromino.down =
+                        keyBindings.rightTetromino.down.toUpperCase();
+                    keyBindings.rightTetromino.rotate =
+                        keyBindings.rightTetromino.rotate.toUpperCase();
+
+                    keyBindings.general.pause =
+                        keyBindings.general.pause.toUpperCase();
+                } catch (e) {
+                    console.error("Error loading saved key bindings:", e);
+                    // Fall back to defaults if there's an error
+                    keyBindings = getDefaultKeyBindings();
+                }
+            } else {
+                keyBindings = getDefaultKeyBindings();
+            }
+
+            // Function to get default key bindings
+            function getDefaultKeyBindings() {
+                return {
+                    leftTetromino: {
+                        left: "C",
+                        right: "B",
+                        down: "V",
+                        rotate: "G",
+                    },
+                    rightTetromino: {
+                        left: "J",
+                        right: "L",
+                        down: "K",
+                        rotate: "I",
+                    },
+                    general: {
+                        pause: "SPACE",
+                    },
+                };
+            }
+
+            // Using existing global variables from ambitetris.js
 
             // TitleScene: displays the title screen
             class TitleScene extends Phaser.Scene {
-              constructor() {
-                super({ key: 'TitleScene' });
-              }
-
-              create() {
-                const { width, height } = this.scale;
-
-                // Create background pattern
-                const gridSize = 32;
-                for (let x = 0; x < width; x += gridSize) {
-                  for (let y = 0; y < height; y += gridSize) {
-                    this.add.rectangle(x, y, gridSize, gridSize).setStrokeStyle(1, 0x222222);
-                  }
+                constructor() {
+                    super({ key: "TitleScene" });
                 }
 
-                // Add title with shadow
-                const titleShadow = this.add.text(width / 2 + 3, height / 4 + 3, 'AMBITETRIS', {
-                  fontFamily: 'Arial',
-                  fontSize: '48px',
-                  color: '#222222',
-                  fontStyle: 'bold'
-                }).setOrigin(0.5);
+                create() {
+                    const { width, height } = this.scale;
 
-                const title = this.add.text(width / 2, height / 4, 'AMBITETRIS', {
-                  fontFamily: 'Arial',
-                  fontSize: '48px',
-                  color: '#ffffff',
-                  fontStyle: 'bold'
-                }).setOrigin(0.5);
+                    // Create background pattern
+                    const gridSize = 32;
+                    for (let x = 0; x < width; x += gridSize) {
+                        for (let y = 0; y < height; y += gridSize) {
+                            this.add
+                                .rectangle(x, y, gridSize, gridSize)
+                                .setStrokeStyle(1, 0x222222);
+                        }
+                    }
 
-                // Add gradient effect to title
-                this.tweens.add({
-                  targets: title,
-                  alpha: { from: 1, to: 0.8 },
-                  duration: 1500,
-                  yoyo: true,
-                  repeat: -1
-                });
+                    // Add title with shadow
+                    const titleShadow = this.add
+                        .text(width / 2 + 3, height / 4 + 3, "AMBITETRIS", {
+                            fontFamily: "Arial",
+                            fontSize: "48px",
+                            color: "#222222",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
 
-                // Add subtitle
-                this.add.text(width / 2, height / 4 + 60, 'Control two tetrominoes at once', {
-                  fontFamily: 'Arial',
-                  fontSize: '20px',
-                  color: '#dddddd'
-                }).setOrigin(0.5);
+                    const title = this.add
+                        .text(width / 2, height / 4, "AMBITETRIS", {
+                            fontFamily: "Arial",
+                            fontSize: "48px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
 
-                // Create a container for left controls
-                const leftControlsContainer = this.add.container(width / 4, height / 2 + 30);
+                    // Add gradient effect to title
+                    this.tweens.add({
+                        targets: title,
+                        alpha: { from: 1, to: 0.8 },
+                        duration: 1500,
+                        yoyo: true,
+                        repeat: -1,
+                    });
 
-                // Left controls title with color matching the left tetromino
-                const leftTitle = this.add.text(0, 0, 'Left Tetromino', {
-                  fontFamily: 'Arial',
-                  fontSize: '18px',
-                  color: '#08ffff',
-                  fontStyle: 'bold'
-                }).setOrigin(0.5);
-                leftControlsContainer.add(leftTitle);
+                    // Add subtitle
+                    this.add
+                        .text(
+                            width / 2,
+                            height / 4 + 60,
+                            "asks for your undivided attention",
+                            {
+                                fontFamily: "Arial",
+                                fontSize: "20px",
+                                color: "#dddddd",
+                            },
+                        )
+                        .setOrigin(0.5);
 
-                // Left controls list
-                const leftControls = [
-                  'C - Move Left',
-                  'B - Move Right',
-                  'V - Move Down',
-                  'G - Rotate'
-                ];
+                    // Create a container for left controls
+                    this.leftControlsContainer = this.add.container(
+                        width / 4,
+                        height / 2 + 30,
+                    );
 
-                let yOffset = 30;
-                leftControls.forEach(control => {
-                  const text = this.add.text(0, yOffset, control, {
-                    fontFamily: 'Arial',
-                    fontSize: '16px',
-                    color: '#ffffff'
-                  }).setOrigin(0.5);
-                  leftControlsContainer.add(text);
-                  yOffset += 25;
-                });
+                    // Left controls title with color matching the left tetromino
+                    const leftTitle = this.add
+                        .text(0, 0, "Left Tetromino", {
+                            fontFamily: "Arial",
+                            fontSize: "18px",
+                            color: "#08ffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
+                    this.leftControlsContainer.add(leftTitle);
 
-                // Create a container for right controls
-                const rightControlsContainer = this.add.container(width * 3/4, height / 2 + 30);
+                    // Left controls list with current key bindings
+                    const leftControls = [
+                        keyBindings.leftTetromino.left + " - Move Left",
+                        keyBindings.leftTetromino.right + " - Move Right",
+                        keyBindings.leftTetromino.down + " - Move Down",
+                        keyBindings.leftTetromino.rotate + " - Rotate",
+                    ];
 
-                // Right controls title with color matching the right tetromino
-                const rightTitle = this.add.text(0, 0, 'Right Tetromino', {
-                  fontFamily: 'Arial',
-                  fontSize: '18px',
-                  color: '#ff9800',
-                  fontStyle: 'bold'
-                }).setOrigin(0.5);
-                rightControlsContainer.add(rightTitle);
+                    let yOffset = 30;
+                    leftControls.forEach((control) => {
+                        const text = this.add
+                            .text(0, yOffset, control, {
+                                fontFamily: "Arial",
+                                fontSize: "16px",
+                                color: "#ffffff",
+                            })
+                            .setOrigin(0.5);
+                        this.leftControlsContainer.add(text);
+                        yOffset += 25;
+                    });
 
-                // Right controls list
-                const rightControls = [
-                  'J - Move Left',
-                  'L - Move Right',
-                  'K - Move Down',
-                  'I - Rotate'
-                ];
+                    // Create a container for right controls
+                    this.rightControlsContainer = this.add.container(
+                        (width * 3) / 4,
+                        height / 2 + 30,
+                    );
 
-                yOffset = 30;
-                rightControls.forEach(control => {
-                  const text = this.add.text(0, yOffset, control, {
-                    fontFamily: 'Arial',
-                    fontSize: '16px',
-                    color: '#ffffff'
-                  }).setOrigin(0.5);
-                  rightControlsContainer.add(text);
-                  yOffset += 25;
-                });
+                    // Right controls title with color matching the right tetromino
+                    const rightTitle = this.add
+                        .text(0, 0, "Right Tetromino", {
+                            fontFamily: "Arial",
+                            fontSize: "18px",
+                            color: "#ff9800",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
+                    this.rightControlsContainer.add(rightTitle);
 
-                // General controls
-                this.add.text(width / 2, height / 2 + 160, 'SPACE - Pause Game', {
-                  fontFamily: 'Arial',
-                  fontSize: '16px',
-                  color: '#ffffff',
-                  align: 'center'
-                }).setOrigin(0.5);
+                    // Right controls list with current key bindings
+                    const rightControls = [
+                        keyBindings.rightTetromino.left + " - Move Left",
+                        keyBindings.rightTetromino.right + " - Move Right",
+                        keyBindings.rightTetromino.down + " - Move Down",
+                        keyBindings.rightTetromino.rotate + " - Rotate",
+                    ];
 
-                // Add start button with a gradient background
-                const startButtonBackground = this.add.graphics();
-                startButtonBackground.fillGradientStyle(
-                  0x333333, 0x333333,
-                  0x222222, 0x222222,
-                  1
-                );
-                startButtonBackground.fillRect(width/2 - 120, height * 0.85 - 25, 240, 50);
-                startButtonBackground.setInteractive(new Phaser.Geom.Rectangle(width/2 - 120, height * 0.85 - 25, 240, 50),
-                  Phaser.Geom.Rectangle.Contains)
-                  .on('pointerdown', () => {
-                    gameState = "playing";
-                    this.scene.start('GameScene');
-                  });
+                    yOffset = 30;
+                    rightControls.forEach((control) => {
+                        const text = this.add
+                            .text(0, yOffset, control, {
+                                fontFamily: "Arial",
+                                fontSize: "16px",
+                                color: "#ffffff",
+                            })
+                            .setOrigin(0.5);
+                        this.rightControlsContainer.add(text);
+                        yOffset += 25;
+                    });
 
-                const startButton = this.add.text(width / 2, height * 0.85, 'CLICK TO START', {
-                  fontFamily: 'Arial',
-                  fontSize: '24px',
-                  color: '#ffffff',
-                  fontStyle: 'bold'
-                }).setOrigin(0.5)
-                  .setInteractive({ useHandCursor: true })
-                  .on('pointerdown', () => {
-                    gameState = "playing";
-                    this.scene.start('GameScene');
-                  });
+                    // General controls
+                    this.pauseText = this.add
+                        .text(
+                            width / 2,
+                            height / 2 + 160,
+                            keyBindings.general.pause + " - Pause Game",
+                            {
+                                fontFamily: "Arial",
+                                fontSize: "16px",
+                                color: "#ffffff",
+                                align: "center",
+                            },
+                        )
+                        .setOrigin(0.5);
 
-                // Create a pulsating effect for the start button
-                this.tweens.add({
-                  targets: startButton,
-                  scale: { from: 1, to: 1.1 },
-                  duration: 800,
-                  yoyo: true,
-                  repeat: -1
-                });
+                    // Add start button with a gradient background
+                    const startButtonBackground = this.add.graphics();
+                    startButtonBackground.fillGradientStyle(
+                        0x333333,
+                        0x333333,
+                        0x222222,
+                        0x222222,
+                        1,
+                    );
+                    startButtonBackground.fillRect(
+                        width / 2 - 120,
+                        height * 0.8 - 25,
+                        240,
+                        50,
+                    );
+                    startButtonBackground
+                        .setInteractive(
+                            new Phaser.Geom.Rectangle(
+                                width / 2 - 120,
+                                height * 0.8 - 25,
+                                240,
+                                50,
+                            ),
+                            Phaser.Geom.Rectangle.Contains,
+                        )
+                        .on("pointerdown", () => {
+                            gameState = "playing";
+                            this.scene.start("GameScene");
+                        });
 
-                // Add falling tetromino animations in the background
-                this.time.addEvent({
-                  delay: 2000,
-                  callback: this.spawnRandomTetromino,
-                  callbackScope: this,
-                  loop: true
-                });
+                    const startButton = this.add
+                        .text(width / 2, height * 0.8, "PLAY GAME", {
+                            fontFamily: "Arial",
+                            fontSize: "24px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5)
+                        .setInteractive({ useHandCursor: true })
+                        .on("pointerdown", () => {
+                            gameState = "playing";
+                            this.scene.start("GameScene");
+                        });
 
-              },
+                    // Create a pulsating effect for the start button
+                    this.tweens.add({
+                        targets: startButton,
+                        scale: { from: 1, to: 1.1 },
+                        duration: 800,
+                        yoyo: true,
+                        repeat: -1,
+                    });
 
-              spawnRandomTetromino: function() {
-                const tetrominoTypes = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-                const type = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
+                    // Add settings button
+                    const settingsButtonBackground = this.add.graphics();
+                    settingsButtonBackground.fillGradientStyle(
+                        0x333333,
+                        0x333333,
+                        0x222222,
+                        0x222222,
+                        1,
+                    );
+                    settingsButtonBackground.fillRect(
+                        width / 2 - 120,
+                        height * 0.9 - 25,
+                        240,
+                        50,
+                    );
+                    settingsButtonBackground
+                        .setInteractive(
+                            new Phaser.Geom.Rectangle(
+                                width / 2 - 120,
+                                height * 0.9 - 25,
+                                240,
+                                50,
+                            ),
+                            Phaser.Geom.Rectangle.Contains,
+                        )
+                        .on("pointerdown", () => {
+                            gameState = "settings";
+                            this.scene.start("SettingsScene");
+                        });
 
-                let color;
-                switch(type) {
-                  case 'I': color = 0x08ffff; break;
-                  case 'J': color = 0x0000f9; break;
-                  case 'L': color = 0xff9800; break;
-                  case 'O': color = 0xffff00; break;
-                  case 'T': color = 0xa000f9; break;
-                  case 'S': color = 0xff0000; break;
-                  case 'Z': color = 0x00c000; break;
+                    const settingsButton = this.add
+                        .text(width / 2, height * 0.9, "SETTINGS", {
+                            fontFamily: "Arial",
+                            fontSize: "24px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5)
+                        .setInteractive({ useHandCursor: true })
+                        .on("pointerdown", () => {
+                            gameState = "settings";
+                            this.scene.start("SettingsScene");
+                        });
+
+                    // Add settings button animation
+                    this.tweens.add({
+                        targets: settingsButton,
+                        scale: { from: 1, to: 1.05 },
+                        duration: 600,
+                        yoyo: true,
+                        repeat: -1,
+                    });
+
+                    // Add falling tetromino animations in the background
+                    this.time.addEvent({
+                        delay: 2000,
+                        callback: this.spawnRandomTetromino,
+                        callbackScope: this,
+                        loop: true,
+                    });
+
+                    // Add key to return to title
+                    this.input.keyboard.on('keydown-ESC', () => {
+                        game.scene.start('TitleScene');
+                    });
+                },
                 }
 
-                const x = Math.random() * this.scale.width;
-                const tetromino = this.add.rectangle(x, -30, 20, 20, color, 0.7).setAlpha(0.5);
+                spawnRandomTetromino() {
+                    const tetrominoTypes = ["I", "J", "L", "O", "S", "T", "Z"];
+                    const type =
+                        tetrominoTypes[
+                            Math.floor(Math.random() * tetrominoTypes.length)
+                        ];
 
-                this.tweens.add({
-                  targets: tetromino,
-                  y: this.scale.height + 50,
-                  duration: 5000 + Math.random() * 5000,
-                  onComplete: () => tetromino.destroy()
-                });
-              }
+                    let color;
+                    switch (type) {
+                        case "I":
+                            color = 0x08ffff;
+                            break;
+                        case "J":
+                            color = 0x0000f9;
+                            break;
+                        case "L":
+                            color = 0xff9800;
+                            break;
+                        case "O":
+                            color = 0xffff00;
+                            break;
+                        case "T":
+                            color = 0xa000f9;
+                            break;
+                        case "S":
+                            color = 0xff0000;
+                            break;
+                        case "Z":
+                            color = 0x00c000;
+                            break;
+                    }
+
+                    const x = Math.random() * this.scale.width;
+                    const tetromino = this.add
+                        .rectangle(x, -30, 20, 20, color, 0.7)
+                        .setAlpha(0.5);
+
+                    this.tweens.add({
+                        targets: tetromino,
+                        y: this.scale.height + 50,
+                        duration: 5000 + Math.random() * 5000,
+                        onComplete: () => tetromino.destroy(),
+                    });
+                }
+            }
+
+            // SettingsScene: allows customizing controls
+            class SettingsScene extends Phaser.Scene {
+                constructor() {
+                    super({ key: "SettingsScene" });
+                    this.currentlyBinding = null;
+                    this.buttonRefs = {};
+                }
+
+                create() {
+                    const { width, height } = this.scale;
+
+                    // Create background pattern
+                    const gridSize = 32;
+                    for (let x = 0; x < width; x += gridSize) {
+                        for (let y = 0; y < height; y += gridSize) {
+                            this.add
+                                .rectangle(x, y, gridSize, gridSize)
+                                .setStrokeStyle(1, 0x222222);
+                        }
+                    }
+
+                    // Title
+                    this.add
+                        .text(width / 2, 50, "SETTINGS", {
+                            fontFamily: "Arial",
+                            fontSize: "36px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
+
+                    // Subtitle
+                    this.add
+                        .text(width / 2, 100, "Customize Controls", {
+                            fontFamily: "Arial",
+                            fontSize: "20px",
+                            color: "#dddddd",
+                        })
+                        .setOrigin(0.5);
+
+                    // Left Tetromino Controls Section
+                    this.add
+                        .text(width / 2, 150, "LEFT TETROMINO", {
+                            fontFamily: "Arial",
+                            fontSize: "18px",
+                            color: "#08ffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
+
+                    // Create control buttons for left tetromino
+                    this.createControlButton(
+                        width / 2 - 100,
+                        190,
+                        "Move Left",
+                        "leftTetromino",
+                        "left",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        240,
+                        "Move Right",
+                        "leftTetromino",
+                        "right",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        290,
+                        "Move Down",
+                        "leftTetromino",
+                        "down",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        340,
+                        "Rotate",
+                        "leftTetromino",
+                        "rotate",
+                    );
+
+                    // Right Tetromino Controls Section
+                    this.add
+                        .text(width / 2, 390, "RIGHT TETROMINO", {
+                            fontFamily: "Arial",
+                            fontSize: "18px",
+                            color: "#ff9800",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5);
+
+                    // Create control buttons for right tetromino
+                    this.createControlButton(
+                        width / 2 - 100,
+                        430,
+                        "Move Left",
+                        "rightTetromino",
+                        "left",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        480,
+                        "Move Right",
+                        "rightTetromino",
+                        "right",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        530,
+                        "Move Down",
+                        "rightTetromino",
+                        "down",
+                    );
+                    this.createControlButton(
+                        width / 2 - 100,
+                        580,
+                        "Rotate",
+                        "rightTetromino",
+                        "rotate",
+                    );
+
+                    // Back button
+                    const backButtonBg = this.add.graphics();
+                    backButtonBg.fillStyle(0x333333, 1);
+                    backButtonBg.fillRoundedRect(
+                        width / 2 - 90,
+                        height - 70,
+                        180,
+                        50,
+                        10,
+                    );
+
+                    const backButton = this.add
+                        .text(width / 2, height - 45, "BACK TO MENU", {
+                            fontFamily: "Arial",
+                            fontSize: "18px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5)
+                        .setInteractive({ useHandCursor: true })
+                        .on("pointerdown", () => {
+                            gameState = "title";
+                            this.saveSettings();
+                            this.scene.start("TitleScene");
+                        });
+
+                    // Listen for key presses to change bindings
+                    this.input.keyboard.on("keydown", (event) => {
+                        if (this.currentlyBinding) {
+                            const { section, action } = this.currentlyBinding;
+
+                            // Get key name
+                            let keyName = event.key.toUpperCase();
+                            if (keyName === " ") keyName = "SPACE";
+
+                            // Update the key binding
+                            keyBindings[section][action] = keyName;
+
+                            // Update the button text
+                            this.buttonRefs[section + "_" + action].setText(
+                                keyName,
+                            );
+
+                            // Clear the current binding
+                            this.buttonRefs[section + "_" + action].setFill(
+                                "#ffffff",
+                            );
+                            this.currentlyBinding = null;
+
+                            // Save settings after every change
+                            this.saveSettings();
+
+                            // Prevent default action for the key
+                            event.preventDefault();
+                        }
+                    });
+                }
+
+                createControlButton(x, y, label, section, action) {
+                    // Create label
+                    this.add
+                        .text(x, y, label + ":", {
+                            fontFamily: "Arial",
+                            fontSize: "16px",
+                            color: "#dddddd",
+                        })
+                        .setOrigin(0, 0.5);
+
+                    // Create button background
+                    const bg = this.add.graphics();
+                    bg.fillStyle(0x222222, 1);
+                    bg.fillRoundedRect(x + 110, y - 15, 60, 30, 5);
+
+                    // Create button text
+                    const buttonText = this.add
+                        .text(x + 140, y, keyBindings[section][action], {
+                            fontFamily: "Arial",
+                            fontSize: "16px",
+                            color: "#ffffff",
+                            fontStyle: "bold",
+                        })
+                        .setOrigin(0.5)
+                        .setInteractive({ useHandCursor: true })
+                        .on("pointerdown", () => {
+                            // Clear previous binding if any
+                            if (this.currentlyBinding) {
+                                const prevButton =
+                                    this.buttonRefs[
+                                        this.currentlyBinding.section +
+                                            "_" +
+                                            this.currentlyBinding.action
+                                    ];
+                                prevButton.setFill("#ffffff");
+                            }
+
+                            // Set this button as currently binding
+                            this.currentlyBinding = { section, action };
+                            buttonText.setFill("#ffff00");
+                        });
+
+                    // Store reference to the button
+                    this.buttonRefs[section + "_" + action] = buttonText;
+                }
+
+                saveSettings() {
+                    // Save settings to localStorage if available
+                    if (window.localStorage) {
+                        localStorage.setItem(
+                            "ambitetrisKeyBindings",
+                            JSON.stringify(keyBindings),
+                        );
+                    }
+
+                    // Update controls display on title screen when returning
+                    updateControlsDisplay();
+
+                    // Make sure key names are upper case for consistent comparison
+                    keyBindings.leftTetromino.left =
+                        keyBindings.leftTetromino.left.toUpperCase();
+                    keyBindings.leftTetromino.right =
+                        keyBindings.leftTetromino.right.toUpperCase();
+                    keyBindings.leftTetromino.down =
+                        keyBindings.leftTetromino.down.toUpperCase();
+                    keyBindings.leftTetromino.rotate =
+                        keyBindings.leftTetromino.rotate.toUpperCase();
+
+                    keyBindings.rightTetromino.left =
+                        keyBindings.rightTetromino.left.toUpperCase();
+                    keyBindings.rightTetromino.right =
+                        keyBindings.rightTetromino.right.toUpperCase();
+                    keyBindings.rightTetromino.down =
+                        keyBindings.rightTetromino.down.toUpperCase();
+                    keyBindings.rightTetromino.rotate =
+                        keyBindings.rightTetromino.rotate.toUpperCase();
+
+                    keyBindings.general.pause =
+                        keyBindings.general.pause.toUpperCase();
+                }
             }
 
             // GameScene: the actual game
             class GameScene extends Phaser.Scene {
-              constructor() {
-                super({ key: 'GameScene' });
-              }
+                constructor() {
+                    super({ key: "GameScene" });
+                }
 
-              create() {
-                // Call the original create function (renamed to gameCreate)
-                gameCreate.apply(this);
-              }
+                create() {
+                    // Initialize/reset game state
+                    board = Array(ROWS)
+                        .fill()
+                        .map(() => Array(COLS).fill(null));
 
-              update(time, delta) {
-                // Call the original update function
-                gameUpdate.apply(this, [time, delta]);
-              }
+                    // Reset timers
+                    dropTimerLeft = 0;
+                    dropTimerRight = 0;
+
+                    // Reset other state
+                    lastLockTime = 0;
+                    lastLockRow = 0;
+                    ambiClearRows = [];
+                    paused = false;
+                    userPaused = false;
+                    moveTimers = {
+                        left: { left: 0, right: 0 },
+                        right: { left: 0, right: 0 },
+                    };
+
+                    // Store scene reference for global access
+                    window.gameScene = this;
+
+                    // Pre-generate textures
+                    preGenerateAllBlockTextures(this);
+
+                    if (!this.textures.exists("particle")) {
+                        let canvas = this.textures
+                            .createCanvas("particle", 1, 1)
+                            .getContext("2d");
+                        canvas.fillStyle = "#fff";
+                        canvas.fillRect(0, 0, 1, 1);
+                        this.textures.get("particle").refresh();
+                    }
+
+                    // Setup keyboard with custom key bindings
+                    cursorsLeft = this.input.keyboard.addKeys({
+                        left: keyBindings.leftTetromino.left,
+                        right: keyBindings.leftTetromino.right,
+                        down: keyBindings.leftTetromino.down,
+                        rotate: keyBindings.leftTetromino.rotate,
+                    });
+                    cursorsRight = this.input.keyboard.addKeys({
+                        left: keyBindings.rightTetromino.left,
+                        right: keyBindings.rightTetromino.right,
+                        down: keyBindings.rightTetromino.down,
+                        rotate: keyBindings.rightTetromino.rotate,
+                    });
+
+                    // Prevent default browser actions for game control keys
+                    this.input.keyboard.on("keydown", function (event) {
+                        const allControlKeys = [
+                            keyBindings.leftTetromino.left,
+                            keyBindings.leftTetromino.right,
+                            keyBindings.leftTetromino.down,
+                            keyBindings.leftTetromino.rotate,
+                            keyBindings.rightTetromino.left,
+                            keyBindings.rightTetromino.right,
+                            keyBindings.rightTetromino.down,
+                            keyBindings.rightTetromino.rotate,
+                            keyBindings.general.pause,
+                        ];
+
+                        if (allControlKeys.includes(event.key.toUpperCase())) {
+                            event.preventDefault();
+                        }
+                    });
+
+                    // Setup key listeners for all controls
+                    this.setupKeyListeners();
+
+                    // Spawn tetrominoes
+                    leftTetromino = spawnTetromino(this, "L");
+                    rightTetromino = spawnTetromino(this, "R");
+
+                    // Set window references
+                    window.leftTetromino = leftTetromino;
+                    window.rightTetromino = rightTetromino;
+
+                    // Store scene reference
+                    leftTetromino.scene = this;
+                    rightTetromino.scene = this;
+
+                    // Spawn ghost tetrominoes
+                    leftGhostTetromino = spawnGhostTetromino(this, "L", leftTetromino);
+                    rightGhostTetromino = spawnGhostTetromino(this, "R", rightTetromino);
+
+                    // Set window references for ghosts
+                    window.leftGhostTetromino = leftGhostTetromino;
+                    window.rightGhostTetromino = rightGhostTetromino;
+
+                    // Store scene reference for global access
+                    window.gameScene = this;
+
+                    // moveTimers initialized in the beginning of create()
+                }
+
+                update(time, delta) {
+                    if (userPaused) return;
+
+                    // Use global variables directly
+
+                    // Synchronize local and window references to avoid undefined issues
+                    if (leftTetromino) window.leftTetromino = leftTetromino;
+                    if (rightTetromino) window.rightTetromino = rightTetromino;
+                    if (leftGhostTetromino) window.leftGhostTetromino = leftGhostTetromino;
+                    if (rightGhostTetromino) window.rightGhostTetromino = rightGhostTetromino;
+
+                    // If window references exist but local ones don't, use the window ones
+                    if (!leftTetromino && window.leftTetromino) leftTetromino = window.leftTetromino;
+                    if (!rightTetromino && window.rightTetromino) rightTetromino = window.rightTetromino;
+                    if (!leftGhostTetromino && window.leftGhostTetromino) leftGhostTetromino = window.leftGhostTetromino;
+                    if (!rightGhostTetromino && window.rightGhostTetromino) rightGhostTetromino = window.rightGhostTetromino;
+
+                    // Check that we have the tetrominoes we need to proceed
+                    if (!leftTetromino || !rightTetromino) {
+                        return; // Skip this frame if references are missing
+                    }
+
+                    // Handle input
+                    this.handleInput(delta);
+
+                    // Update ghost positions
+                    if (leftTetromino && leftGhostTetromino) {
+                        updateGhostTetromino(
+                            leftTetromino,
+                            leftGhostTetromino,
+                            rightTetromino,
+                        );
+                    }
+                    if (rightTetromino && rightGhostTetromino) {
+                        updateGhostTetromino(
+                            rightTetromino,
+                            rightGhostTetromino,
+                            leftTetromino,
+                        );
+                    }
+
+                    // Handle dropping
+                    dropTimerLeft += delta;
+                    dropTimerRight += delta;
+
+                    let leftInterval = fastDropLeft ? 40 : 500;
+                    let rightInterval = fastDropRight ? 40 : 500;
+
+                    if (dropTimerLeft > leftInterval) {
+                        moveDown(leftTetromino, "L");
+                        dropTimerLeft = 0;
+                    }
+                    if (dropTimerRight > rightInterval) {
+                        moveDown(rightTetromino, "R");
+                        dropTimerRight = 0;
+                    }
+                }
+
+                setupKeyListeners() {
+                    // Clear existing listeners
+                    this.input.keyboard.removeAllKeys(true);
+
+                    // Reset key state
+                    leftKeysHeld = { left: false, right: false, down: false };
+                    fastDropLeft = false;
+                    fastDropRight = false;
+
+                    // Setup keyboard with custom key bindings using dynamic key codes
+                    cursorsLeft = {};
+                    cursorsRight = {};
+
+                    // Setup general keyboard event listeners instead of specific key codes
+                    this.input.keyboard.on("keydown", (event) => {
+                        const key = event.key.toUpperCase();
+
+                        // Left tetromino controls
+                        if (key === keyBindings.leftTetromino.left) {
+                            leftKeysHeld.left = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.leftTetromino.right) {
+                            leftKeysHeld.right = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.leftTetromino.down) {
+                            leftKeysHeld.down = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.leftTetromino.rotate) {
+                            if (!cursorsLeft.rotate) cursorsLeft.rotate = {};
+                            cursorsLeft.rotate.isDown = true;
+                            event.preventDefault();
+                        }
+
+                        // Right tetromino controls
+                        else if (key === keyBindings.rightTetromino.left) {
+                            if (!cursorsRight.left) cursorsRight.left = {};
+                            cursorsRight.left.isDown = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.rightTetromino.right) {
+                            if (!cursorsRight.right) cursorsRight.right = {};
+                            cursorsRight.right.isDown = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.rightTetromino.down) {
+                            if (!cursorsRight.down) cursorsRight.down = {};
+                            cursorsRight.down.isDown = true;
+                            event.preventDefault();
+                        } else if (key === keyBindings.rightTetromino.rotate) {
+                            if (!cursorsRight.rotate) cursorsRight.rotate = {};
+                            cursorsRight.rotate.isDown = true;
+                            event.preventDefault();
+                        }
+
+                        // Pause control
+                        else if (key === keyBindings.general.pause) {
+                            userPaused = !userPaused;
+                            console.log(
+                                userPaused ? "Game Paused" : "Game Unpaused",
+                            );
+                            event.preventDefault();
+                        }
+                    });
+
+                    this.input.keyboard.on("keyup", (event) => {
+                        const key = event.key.toUpperCase();
+
+                        // Left tetromino controls
+                        if (key === keyBindings.leftTetromino.left) {
+                            leftKeysHeld.left = false;
+                        } else if (key === keyBindings.leftTetromino.right) {
+                            leftKeysHeld.right = false;
+                        } else if (key === keyBindings.leftTetromino.down) {
+                            leftKeysHeld.down = false;
+                        } else if (key === keyBindings.leftTetromino.rotate) {
+                            if (!cursorsLeft.rotate) cursorsLeft.rotate = {};
+                            cursorsLeft.rotate.isDown = false;
+                        }
+
+                        // Right tetromino controls
+                        else if (key === keyBindings.rightTetromino.left) {
+                            if (!cursorsRight.left) cursorsRight.left = {};
+                            cursorsRight.left.isDown = false;
+                        } else if (key === keyBindings.rightTetromino.right) {
+                            if (!cursorsRight.right) cursorsRight.right = {};
+                            cursorsRight.right.isDown = false;
+                        } else if (key === keyBindings.rightTetromino.down) {
+                            if (!cursorsRight.down) cursorsRight.down = {};
+                            cursorsRight.down.isDown = false;
+                        } else if (key === keyBindings.rightTetromino.rotate) {
+                            if (!cursorsRight.rotate) cursorsRight.rotate = {};
+                            cursorsRight.rotate.isDown = false;
+                        }
+                    });
+
+                    // Add reset method to cursor objects
+                    cursorsLeft.rotate = {
+                        isDown: false,
+                        reset: function () {
+                            this.isDown = false;
+                        },
+                    };
+                    cursorsRight.rotate = {
+                        isDown: false,
+                        reset: function () {
+                            this.isDown = false;
+                        },
+                    };
+
+                    cursorsRight.left = { isDown: false };
+                    cursorsRight.right = { isDown: false };
+                    cursorsRight.down = { isDown: false };
+                }
+
+                handleInput(delta) {
+                    // Safety check - ensure we have valid tetrominoes
+                    if (!leftTetromino || !rightTetromino) {
+                        return;
+                    }
+
+                    // Make sure window references are set
+                    window.leftTetromino = leftTetromino;
+                    window.rightTetromino = rightTetromino;
+
+                    // Left tetromino movement
+                    if (leftKeysHeld.left) {
+                        moveTimers.left.left += delta;
+                        if (
+                            moveTimers.left.left === delta ||
+                            moveTimers.left.left > INITIAL_DELAY
+                        ) {
+                            moveTetromino(leftTetromino, -1);
+                            if (moveTimers.left.left > INITIAL_DELAY)
+                                moveTimers.left.left -= REPEAT_INTERVAL;
+                        }
+                    } else {
+                        moveTimers.left.left = 0;
+                    }
+
+                    if (leftKeysHeld.right) {
+                        moveTimers.left.right += delta;
+                        if (
+                            moveTimers.left.right === delta ||
+                            moveTimers.left.right > INITIAL_DELAY
+                        ) {
+                            moveTetromino(leftTetromino, 1);
+                            if (moveTimers.left.right > INITIAL_DELAY)
+                                moveTimers.left.right -= REPEAT_INTERVAL;
+                        }
+                    } else {
+                        moveTimers.left.right = 0;
+                    }
+
+                    fastDropLeft = leftKeysHeld.down;
+
+                    if (cursorsLeft.rotate.isDown) {
+                        rotateTetromino(leftTetromino);
+                        cursorsLeft.rotate.reset();
+                    }
+
+                    // Right tetromino movement
+                    if (cursorsRight.left.isDown) {
+                        moveTimers.right.left += delta;
+                        if (
+                            moveTimers.right.left === delta ||
+                            moveTimers.right.left > INITIAL_DELAY
+                        ) {
+                            moveTetromino(rightTetromino, -1);
+                            if (moveTimers.right.left > INITIAL_DELAY)
+                                moveTimers.right.left -= REPEAT_INTERVAL;
+                        }
+                    } else {
+                        moveTimers.right.left = 0;
+                    }
+
+                    if (cursorsRight.right.isDown) {
+                        moveTimers.right.right += delta;
+                        if (
+                            moveTimers.right.right === delta ||
+                            moveTimers.right.right > INITIAL_DELAY
+                        ) {
+                            moveTetromino(rightTetromino, 1);
+                            if (moveTimers.right.right > INITIAL_DELAY)
+                                moveTimers.right.right -= REPEAT_INTERVAL;
+                        }
+                    } else {
+                        moveTimers.right.right = 0;
+                    }
+
+                    fastDropRight = cursorsRight.down.isDown;
+
+                    if (cursorsRight.rotate.isDown) {
+                        rotateTetromino(rightTetromino);
+                        cursorsRight.rotate.reset();
+                    }
+                }
             }
 
-            // Rename original functions to avoid conflicts
-            const gameCreate = create;
-            const gameUpdate = update;
+            // Make sure important functions from ambitetris.js are accessible and retain their original context
+            // This ensures all original game functions work as expected
+            window.moveTetromino = moveTetromino;
+            window.rotateTetromino = rotateTetromino;
+            window.moveDown = moveDown;
+            window.updateGhostTetromino = updateGhostTetromino;
+            window.spawnTetromino = spawnTetromino;
+            window.spawnGhostTetromino = spawnGhostTetromino;
+            window.canPlace = canPlace;
+            window.lockBothTetrominoes = lockBothTetrominoes;
+            window.tryPushOtherHorizontally = tryPushOtherHorizontally;
+            window.tryPushOtherDown = tryPushOtherDown;
+            window.updateTetrominoSprites = updateTetrominoSprites;
 
-            // Override global create/update to be empty
-            // (our scenes will call the originals)
-            function create() {}
-            function update() {}
+            // Function to update the controls display on the title screen
+
+            function updateControlsDisplay() {
+                if (game && game.scene.scenes) {
+                    const titleScene = game.scene.getScene("TitleScene");
+                    if (titleScene && titleScene.scene.isActive()) {
+                        // Clear existing control containers if they exist
+                        if (titleScene.leftControlsContainer) {
+                            titleScene.leftControlsContainer.removeAll(true);
+                        }
+                        if (titleScene.rightControlsContainer) {
+                            titleScene.rightControlsContainer.removeAll(true);
+                        }
+
+                        const { width } = titleScene.scale;
+
+                        // Left controls list with updated keys
+                        const leftControls = [
+                            keyBindings.leftTetromino.left + " - Move Left",
+                            keyBindings.leftTetromino.right + " - Move Right",
+                            keyBindings.leftTetromino.down + " - Move Down",
+                            keyBindings.leftTetromino.rotate + " - Rotate",
+                        ];
+
+                        let yOffset = 30;
+                        leftControls.forEach((control) => {
+                            const text = titleScene.add
+                                .text(0, yOffset, control, {
+                                    fontFamily: "Arial",
+                                    fontSize: "16px",
+                                    color: "#ffffff",
+                                })
+                                .setOrigin(0.5);
+                            titleScene.leftControlsContainer.add(text);
+                            yOffset += 25;
+                        });
+
+                        // Right controls list with updated keys
+                        const rightControls = [
+                            keyBindings.rightTetromino.left + " - Move Left",
+                            keyBindings.rightTetromino.right + " - Move Right",
+                            keyBindings.rightTetromino.down + " - Move Down",
+                            keyBindings.rightTetromino.rotate + " - Rotate",
+                        ];
+
+                        yOffset = 30;
+                        rightControls.forEach((control) => {
+                            const text = titleScene.add
+                                .text(0, yOffset, control, {
+                                    fontFamily: "Arial",
+                                    fontSize: "16px",
+                                    color: "#ffffff",
+                                })
+                                .setOrigin(0.5);
+                            titleScene.rightControlsContainer.add(text);
+                            yOffset += 25;
+                        });
+
+                        // Update pause control
+                        if (titleScene.pauseText) {
+                            titleScene.pauseText.setText(
+                                keyBindings.general.pause + " - Pause Game",
+                            );
+                        }
+                    }
+                }
+            }
 
             // Game over function
             window.gameOver = function() {
               gameState = "title";
+
+              // Reset input state
+              leftKeysHeld = { left: false, right: false, down: false };
+              fastDropLeft = false;
+              fastDropRight = false;
+              userPaused = false;
+
+              // First destroy sprite objects to prevent memory leaks
+              if (window.leftTetromino && window.leftTetromino.sprites) {
+                window.leftTetromino.sprites.forEach(s => {
+                  if (s && s.destroy) s.destroy();
+                });
+              }
+
+              if (window.rightTetromino && window.rightTetromino.sprites) {
+                window.rightTetromino.sprites.forEach(s => {
+                  if (s && s.destroy) s.destroy();
+                });
+              }
+
+              if (window.leftGhostTetromino && window.leftGhostTetromino.sprites) {
+                window.leftGhostTetromino.sprites.forEach(s => {
+                  if (s && s.destroy) s.destroy();
+                });
+              }
+
+              if (window.rightGhostTetromino && window.rightGhostTetromino.sprites) {
+                window.rightGhostTetromino.sprites.forEach(s => {
+                  if (s && s.destroy) s.destroy();
+                });
+              }
+
+              // Clear all tetromino references
+              window.leftTetromino = null;
+              window.rightTetromino = null;
+              window.leftGhostTetromino = null;
+              window.rightGhostTetromino = null;
+              leftTetromino = null;
+              rightTetromino = null;
+              leftGhostTetromino = null;
+              rightGhostTetromino = null;
+
+              if (cursorsLeft) {
+                if (cursorsLeft.rotate) cursorsLeft.rotate.isDown = false;
+              }
+              if (cursorsRight) {
+                if (cursorsRight.left) cursorsRight.left.isDown = false;
+                if (cursorsRight.right) cursorsRight.right.isDown = false;
+                if (cursorsRight.down) cursorsRight.down.isDown = false;
+                if (cursorsRight.rotate) cursorsRight.rotate.isDown = false;
+              }
               game.scene.start('TitleScene');
             };
 
             const config = {
-              type: Phaser.AUTO,
-              width: 448, // 14 blocks wide * 32
-              height: 640,
-              backgroundColor: "#111",
-              scene: [TitleScene, GameScene]
+                type: Phaser.AUTO,
+                width: 448, // 14 blocks wide * 32
+                height: 640,
+                backgroundColor: "#111",
+                scene: [TitleScene, SettingsScene, GameScene],
+                // Disable default key captures to allow our custom key handling
+                input: {
+                    keyboard: {
+                        capture: [],
+                    },
+                },
             };
 
             const game = new Phaser.Game(config);
