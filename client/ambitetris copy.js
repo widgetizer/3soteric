@@ -3,7 +3,6 @@
 const BLOCK_SIZE = 32;
 const ROWS = 20,
   COLS = 14;
-const PLAY_AREA_X_OFFSET = 4; // In blocks
 const CORNER_RADIUS = 16; // Adjust as needed for visual appeal
 const TETROMINOES = {
   I: {
@@ -238,8 +237,8 @@ function getCornerRadiiConfig(shape, currentBlockLocalPos, cornerRadius) {
   return radii;
 }
 
-// Block texture key format: 'block_[L|R|LG|RG]_[type]_[rotation]_[blockIndex]'
-// Example: 'block_LG_I_0_2' for left-side ghost I tetromino, rotation 0, block index 2
+// Block texture key format: 'block_[L|R]_[type]_[rotation]_[blockIndex]'
+// Example: 'block_L_I_0_2' for left-side I tetromino, rotation 0, block index 2
 
 // This function will be called during initialization to pre-generate all textures
 function preGenerateAllBlockTextures(scene) {
@@ -247,11 +246,10 @@ function preGenerateAllBlockTextures(scene) {
   Object.keys(TETROMINOES).forEach((type) => {
     for (let rotation = 0; rotation < 4; rotation++) {
       for (let blockIndex = 0; blockIndex < 4; blockIndex++) {
-        const sides = ["L", "R", "LG", "RG"];
-        sides.forEach((side) => {
-          const key = `block_${side}_${type}_${rotation}_${blockIndex}`;
-          if (scene.textures.exists(key)) scene.textures.remove(key);
-        });
+        const leftKey = `block_L_${type}_${rotation}_${blockIndex}`;
+        const rightKey = `block_R_${type}_${rotation}_${blockIndex}`;
+        if (scene.textures.exists(leftKey)) scene.textures.remove(leftKey);
+        if (scene.textures.exists(rightKey)) scene.textures.remove(rightKey);
       }
     }
   });
@@ -259,7 +257,6 @@ function preGenerateAllBlockTextures(scene) {
   // Generate all possible block textures for all tetromino types, rotations, and blocks
   Object.entries(TETROMINOES).forEach(([type, tet]) => {
     const color = tet.color;
-    const baseColor = Phaser.Display.Color.HexStringToColor(color);
 
     // For each rotation (some pieces have fewer than 4 unique rotations)
     for (let rotation = 0; rotation < tet.blocks.length; rotation++) {
@@ -267,6 +264,8 @@ function preGenerateAllBlockTextures(scene) {
 
       // For each block in this shape
       for (let blockIndex = 0; blockIndex < 4; blockIndex++) {
+        // LEFT SIDE - ROUNDED CORNER STYLE
+        const leftKey = `block_L_${type}_${rotation}_${blockIndex}`;
         const currentBlockLocalPos = shape[blockIndex];
         const radii = getCornerRadiiConfig(
           shape,
@@ -274,74 +273,20 @@ function preGenerateAllBlockTextures(scene) {
           CORNER_RADIUS,
         );
 
-        // ---- Keys for all 4 variants ----
-        const leftKey = `block_L_${type}_${rotation}_${blockIndex}`;
+        const gfxL = scene.add.graphics();
+        gfxL.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
+        gfxL.fillRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
+        gfxL.lineStyle(1, 0x333333, 0.8);
+        gfxL.strokeRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
+        gfxL.generateTexture(leftKey, BLOCK_SIZE, BLOCK_SIZE);
+        gfxL.destroy();
+
+        // RIGHT SIDE - BEVELED STYLE
         const rightKey = `block_R_${type}_${rotation}_${blockIndex}`;
-        const leftGhostKey = `block_LG_${type}_${rotation}_${blockIndex}`;
-        const rightGhostKey = `block_RG_${type}_${rotation}_${blockIndex}`;
-
-        // ---- LEFT SIDE (ACTIVE) - PUFFY GRADIENT STYLE ----
-        const rt = scene.add.renderTexture(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-        rt.clear(); // Ensure transparent background
-
-        // 1. Draw the base colored rounded rectangle
-        const baseGfx = scene.add.graphics();
-        baseGfx.fillStyle(baseColor.color);
-        baseGfx.fillRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
-        rt.draw(baseGfx, 0, 0);
-        baseGfx.destroy();
-
-        // 2. Create and draw the radial gradient for the "puffy" highlight
-        const gradientTextureKey = `gradient_L_${type}_${rotation}_${blockIndex}`;
-        if (scene.textures.exists(gradientTextureKey)) {
-          scene.textures.remove(gradientTextureKey);
-        }
-        const canvasTexture = scene.textures.createCanvas(
-          gradientTextureKey,
-          BLOCK_SIZE,
-          BLOCK_SIZE,
-        );
-        const context = canvasTexture.getContext();
-        const lighterColor = Phaser.Display.Color.IntegerToColor(
-          Phaser.Display.Color.GetColor(255, 255, 255),
-        );
-        const gradient = context.createRadialGradient(
-          BLOCK_SIZE * 0.3,
-          BLOCK_SIZE * 0.3,
-          0,
-          BLOCK_SIZE / 2,
-          BLOCK_SIZE / 2,
-          BLOCK_SIZE * 0.8,
-        );
-        gradient.addColorStop(
-          0,
-          `rgba(${lighterColor.r}, ${lighterColor.g}, ${lighterColor.b}, 0.5)`,
-        );
-        gradient.addColorStop(
-          1,
-          `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, 0)`,
-        );
-        context.fillStyle = gradient;
-        context.fillRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-        canvasTexture.refresh();
-        rt.draw(gradientTextureKey, 0, 0);
-        scene.textures.remove(gradientTextureKey);
-
-        // 3. Draw the border
-        const borderGfx = scene.add.graphics();
-        borderGfx.lineStyle(1, 0x333333, 0.8);
-        borderGfx.strokeRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
-        rt.draw(borderGfx, 0, 0);
-        borderGfx.destroy();
-
-        // 4. Save the combined texture
-        rt.saveTexture(leftKey);
-        rt.destroy();
-
-        // ---- RIGHT SIDE (ACTIVE) - BEVELED STYLE ----
         const gfxR = scene.add.graphics();
-        gfxR.fillStyle(baseColor.color, 1);
+        gfxR.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
         gfxR.fillRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
+
         // Top-left highlight
         gfxR.lineStyle(0);
         gfxR.fillStyle(0xffffff, 0.28);
@@ -353,6 +298,7 @@ function preGenerateAllBlockTextures(scene) {
         gfxR.lineTo(0, 0);
         gfxR.closePath();
         gfxR.fillPath();
+
         // Bottom-right shadow
         gfxR.fillStyle(0x000000, 0.18);
         gfxR.beginPath();
@@ -363,59 +309,21 @@ function preGenerateAllBlockTextures(scene) {
         gfxR.lineTo(BLOCK_SIZE, BLOCK_SIZE);
         gfxR.closePath();
         gfxR.fillPath();
+
         gfxR.lineStyle(2, 0x222222, 1);
         gfxR.strokeRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
         gfxR.generateTexture(rightKey, BLOCK_SIZE, BLOCK_SIZE);
         gfxR.destroy();
-
-        // ---- LEFT GHOST (LG) - SEMI-TRANSPARENT ROUNDED ----
-        const gfxLG = scene.add.graphics();
-        gfxLG.fillStyle(0x888888, 0.4); // Semi-transparent gray
-        gfxLG.fillRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
-        gfxLG.lineStyle(1, 0xdddddd, 0.4);
-        gfxLG.strokeRoundedRect(0, 0, BLOCK_SIZE, BLOCK_SIZE, radii);
-        gfxLG.generateTexture(leftGhostKey, BLOCK_SIZE, BLOCK_SIZE);
-        gfxLG.destroy();
-
-        // ---- RIGHT GHOST (RG) - SEMI-TRANSPARENT BEVELED ----
-        const gfxRG = scene.add.graphics();
-        gfxRG.fillStyle(0x888888, 0.4); // Semi-transparent gray
-        gfxRG.fillRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-        // Highlights and shadows for the ghost, more subtle
-        gfxRG.fillStyle(0xffffff, 0.1);
-        gfxRG.beginPath();
-        gfxRG.moveTo(0, 0);
-        gfxRG.lineTo(BLOCK_SIZE, 0);
-        gfxRG.lineTo(BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.3);
-        gfxRG.lineTo(BLOCK_SIZE * 0.3, BLOCK_SIZE * 0.3);
-        gfxRG.lineTo(0, 0);
-        gfxRG.closePath();
-        gfxRG.fillPath();
-        // Shadow
-        gfxRG.fillStyle(0x000000, 0.1);
-        gfxRG.beginPath();
-        gfxRG.moveTo(BLOCK_SIZE, BLOCK_SIZE);
-        gfxRG.lineTo(0, BLOCK_SIZE);
-        gfxRG.lineTo(BLOCK_SIZE * 0.3, BLOCK_SIZE * 0.7);
-        gfxRG.lineTo(BLOCK_SIZE * 0.7, BLOCK_SIZE * 0.7);
-        gfxRG.lineTo(BLOCK_SIZE, BLOCK_SIZE);
-        gfxRG.closePath();
-        gfxRG.fillPath();
-        gfxRG.lineStyle(1, 0x222222, 0.5);
-        gfxRG.strokeRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-        gfxRG.generateTexture(rightGhostKey, BLOCK_SIZE, BLOCK_SIZE);
-        gfxRG.destroy();
       }
     }
   });
 
-  console.log("Pre-generated all tetromino block textures (including ghosts)");
+  console.log("Pre-generated all tetromino block textures");
 }
 
 // Helper function to get the appropriate texture key for a tetromino block
-function getBlockTextureKey(side, type, rotation, blockIndex, isGhost = false) {
-  const sidePrefix = isGhost ? side + "G" : side;
-  return `block_${sidePrefix}_${type}_${rotation}_${blockIndex}`;
+function getBlockTextureKey(side, type, rotation, blockIndex) {
+  return `block_${side}_${type}_${rotation}_${blockIndex}`;
 }
 
 // ---- AmbiClear tracking ----
@@ -453,14 +361,8 @@ function canPlace(tetromino, x, y, rotation, otherTetromino) {
   for (let i = 0; i < 4; i++) {
     const bx = x + blocks[i][0];
     const by = y + blocks[i][1];
-    if (
-      bx < PLAY_AREA_X_OFFSET ||
-      bx >= COLS + PLAY_AREA_X_OFFSET ||
-      by < 0 ||
-      by >= ROWS
-    )
-      return false;
-    if (board[by][bx - PLAY_AREA_X_OFFSET]) return false;
+    if (bx < 0 || bx >= COLS || by < 0 || by >= ROWS) return false;
+    if (board[by][bx]) return false;
     // Check against other falling tetromino
     if (otherTetromino) {
       // Ensure otherTetromino and its properties are defined before accessing them
@@ -492,11 +394,7 @@ function moveTetromino(tetromino, dx) {
   for (let i = 0; i < 4; i++) {
     const bx = tetromino.x + blocks[i][0] + dx;
     const by = tetromino.y + blocks[i][1];
-    if (
-      bx < PLAY_AREA_X_OFFSET ||
-      bx >= COLS + PLAY_AREA_X_OFFSET ||
-      (by >= 0 && board[by][bx - PLAY_AREA_X_OFFSET])
-    ) {
+    if (bx < 0 || bx >= COLS || (by >= 0 && board[by][bx])) {
       canMove = false;
       break;
     }
@@ -551,11 +449,7 @@ function tryPushOtherHorizontally(tetromino, dx) {
   for (let i = 0; i < 4; i++) {
     const bx = tetromino.x + blocks[i][0] + dx;
     const by = tetromino.y + blocks[i][1];
-    if (
-      bx < PLAY_AREA_X_OFFSET ||
-      bx >= COLS + PLAY_AREA_X_OFFSET ||
-      (by >= 0 && board[by][bx - PLAY_AREA_X_OFFSET])
-    ) {
+    if (bx < 0 || bx >= COLS || (by >= 0 && board[by][bx])) {
       return false;
     }
   }
@@ -575,7 +469,7 @@ function moveDown(tetromino, side) {
   for (let i = 0; i < 4; i++) {
     const bx = tetromino.x + blocks[i][0];
     const by = tetromino.y + blocks[i][1] + 1;
-    if (by >= ROWS || (by >= 0 && board[by][bx - PLAY_AREA_X_OFFSET])) {
+    if (by >= ROWS || (by >= 0 && board[by][bx])) {
       blockedByBoard = true;
       break;
     }
@@ -614,7 +508,7 @@ function moveDown(tetromino, side) {
     for (let i = 0; i < 4; i++) {
       const bx = tetromino.x + blocks[i][0];
       const by = tetromino.y + blocks[i][1];
-      board[by][bx - PLAY_AREA_X_OFFSET] = {
+      board[by][bx] = {
         type: tetromino.type,
         sprite: tetromino.sprites[i],
         side: tetromino.side,
@@ -643,15 +537,18 @@ function moveDown(tetromino, side) {
         currentLeft.x,
         currentLeft.y,
         currentLeft.rotation,
+        currentRight,
       ) ||
       !canPlace(
         currentRight,
         currentRight.x,
         currentRight.y,
         currentRight.rotation,
+        currentLeft,
       )
     ) {
-      tetromino.scene.scene.start("MainMenu");
+      alert("Game Over!");
+      location.reload();
       return;
     }
   }
@@ -662,7 +559,7 @@ function tryPushOtherDown(tetromino, side) {
   for (let i = 0; i < 4; i++) {
     const bx = tetromino.x + blocks[i][0];
     const by = tetromino.y + blocks[i][1] + 1;
-    if (by >= ROWS || (by >= 0 && board[by][bx - PLAY_AREA_X_OFFSET])) {
+    if (by >= ROWS || (by >= 0 && board[by][bx])) {
       return false;
     }
   }
@@ -679,13 +576,8 @@ function lockBothTetrominoes(t1, t2) {
       const bx = tetromino.x + blocks[i][0];
       const by = tetromino.y + blocks[i][1];
       // Ensure by is within board bounds before assignment
-      if (
-        by >= 0 &&
-        by < ROWS &&
-        bx >= PLAY_AREA_X_OFFSET &&
-        bx < COLS + PLAY_AREA_X_OFFSET
-      ) {
-        board[by][bx - PLAY_AREA_X_OFFSET] = {
+      if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS) {
+        board[by][bx] = {
           type: tetromino.type,
           sprite: tetromino.sprites[i],
           side: tetromino.side,
@@ -729,8 +621,8 @@ function lockBothTetrominoes(t1, t2) {
   );
 
   if (
-    !canPlace(newLeft, newLeft.x, newLeft.y, newLeft.rotation) ||
-    !canPlace(newRight, newRight.x, newRight.y, newRight.rotation)
+    !canPlace(newLeft, newLeft.x, newLeft.y, newLeft.rotation, newRight) ||
+    !canPlace(newRight, newRight.x, newRight.y, newRight.rotation, newLeft)
   ) {
     alert("Game Over!");
     location.reload();
@@ -753,8 +645,9 @@ function updateTetrominoSprites(tetromino, isGhost = false) {
       tetromino.sprites[i].x = gx * BLOCK_SIZE + BLOCK_SIZE / 2;
       tetromino.sprites[i].y = gy * BLOCK_SIZE + BLOCK_SIZE / 2;
 
-      // Set appearance properties based on ghost status
+      // Set appearance properties based on ghost status (tinting handled in spawn methods)
       if (isGhost) {
+        tetromino.sprites[i].setAlpha(0.3);
         tetromino.sprites[i].setDepth(0);
       } else {
         tetromino.sprites[i].setAlpha(1);
@@ -857,7 +750,6 @@ function rotateTetromino(tetromino) {
         tetromino.type,
         tetromino.rotation,
         i,
-        false, // isGhost = false
       );
       const sprite = tetromino.scene.add.sprite(
         blockWorldX,
@@ -918,18 +810,11 @@ function rotateTetromino(tetromino) {
 }
 
 function spawnTetromino(scene, side) {
-  let type;
-  if (side === "L") {
-    type = leftPreview.shift();
-    leftPreview.push(getRandomTetrominoType());
-  } else {
-    type = rightPreview.shift();
-    rightPreview.push(getRandomTetrominoType());
-  }
-
+  const types = Object.keys(TETROMINOES);
+  const type = types[Math.floor(Math.random() * types.length)];
   const tet = TETROMINOES[type];
   const rotation = 0;
-  const x = side === "L" ? 4 + 2 : 4 + 9;
+  const x = side === "L" ? 4 : 9;
   const y = 0;
   const color = tet.color;
   const shape = tet.blocks[rotation];
@@ -940,8 +825,8 @@ function spawnTetromino(scene, side) {
     let blockX = (x + shape[i][0]) * BLOCK_SIZE + BLOCK_SIZE / 2;
     let blockY = (y + shape[i][1]) * BLOCK_SIZE + BLOCK_SIZE / 2;
 
-    // Use pre-generated textures for the active piece (isGhost = false)
-    const textureKey = getBlockTextureKey(side, type, rotation, i, false);
+    // Use pre-generated textures
+    const textureKey = getBlockTextureKey(side, type, rotation, i);
 
     if (!scene.textures.exists(textureKey)) {
       console.error(
@@ -974,6 +859,7 @@ function spawnGhostTetromino(scene, side, activeTetromino) {
     !activeTetromino.type ||
     !TETROMINOES[activeTetromino.type]
   ) {
+    // console.error("Cannot spawn ghost: active tetromino is invalid", activeTetromino);
     return { sprites: [] }; // Return a minimal object to prevent errors
   }
   const { type, color, rotation, x, y } = activeTetromino;
@@ -984,8 +870,8 @@ function spawnGhostTetromino(scene, side, activeTetromino) {
     let blockX = (x + shape[i][0]) * BLOCK_SIZE + BLOCK_SIZE / 2;
     let blockY = (y + shape[i][1]) * BLOCK_SIZE + BLOCK_SIZE / 2;
 
-    // Use pre-generated textures for the ghost piece (isGhost = true)
-    const textureKey = getBlockTextureKey(side, type, rotation, i, true);
+    // Use pre-generated textures
+    const textureKey = getBlockTextureKey(side, type, rotation, i);
 
     if (!scene.textures.exists(textureKey)) {
       console.error(
@@ -995,7 +881,8 @@ function spawnGhostTetromino(scene, side, activeTetromino) {
 
     const sprite = scene.add.sprite(blockX, blockY, textureKey);
     sprite.setDepth(0);
-    // No need for alpha or tint, as it's baked into the texture
+    sprite.setAlpha(0.3); // Standard ghost alpha
+    sprite.setTintFill(0x808080); // Set ALL ghosts to gray
     sprites.push(sprite);
   }
   return {
@@ -1019,39 +906,27 @@ function updateGhostTetromino(tetromino, ghostTetromino, otherTetromino) {
     !ghostTetromino.type ||
     !TETROMINOES[tetromino.type] ||
     !ghostTetromino.sprites ||
-    ghostTetromino.sprites.some((s) => !s)
-  ) {
+    ghostTetromino.sprites.some(s => !s)
+  )
     return;
-  }
 
-  // Sync ghost's state with the active piece.
-  // If rotation or type changes, we need to update the textures.
-  if (
-    ghostTetromino.rotation !== tetromino.rotation ||
-    ghostTetromino.type !== tetromino.type
-  ) {
-    ghostTetromino.rotation = tetromino.rotation;
-    ghostTetromino.type = tetromino.type;
+  ghostTetromino.rotation = tetromino.rotation;
+  ghostTetromino.type = tetromino.type;
 
-    for (let i = 0; i < 4; i++) {
-      const textureKey = getBlockTextureKey(
-        tetromino.side,
-        tetromino.type,
-        tetromino.rotation,
-        i,
-        true, // isGhost = true
-      );
-      if (ghostTetromino.sprites[i]) {
-        ghostTetromino.sprites[i].setTexture(textureKey);
-      }
-    }
+  for (let i = 0; i < 4; i++) {
+    const textureKey = getBlockTextureKey(
+      tetromino.side,
+      tetromino.type,
+      tetromino.rotation,
+      i
+    );
+    ghostTetromino.sprites[i].setTexture(textureKey);
   }
 
   ghostTetromino.blocks =
     TETROMINOES[tetromino.type].blocks[tetromino.rotation];
   ghostTetromino.x = tetromino.x;
 
-  // Calculate the lowest possible Y position.
   let lowestY = tetromino.y;
   let tempGhostForCheck = { ...tetromino };
   while (
@@ -1060,14 +935,13 @@ function updateGhostTetromino(tetromino, ghostTetromino, otherTetromino) {
       tempGhostForCheck.x,
       lowestY + 1,
       tempGhostForCheck.rotation,
-      otherTetromino,
+      otherTetromino
     )
   ) {
     lowestY++;
   }
   ghostTetromino.y = lowestY;
 
-  // Update the positions of the ghost sprites.
   updateTetrominoSprites(ghostTetromino, true);
 }
 
@@ -1075,8 +949,6 @@ let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 let cursorsLeft, cursorsRight;
 let leftTetromino, rightTetromino;
 let leftGhostTetromino, rightGhostTetromino; // Added ghost variables
-let leftPreview = [],
-  rightPreview = [];
 let dropTimerLeft = 0,
   dropTimerRight = 0;
 
@@ -1094,287 +966,109 @@ const REPEAT_INTERVAL = 40;
 let leftKeysHeld = { left: false, right: false, down: false };
 let paused = false;
 let userPaused = false;
-let score = 0;
-let linesCleared = 0;
 
-function getRandomTetrominoType() {
-  const types = Object.keys(TETROMINOES);
-  return types[Math.floor(Math.random() * types.length)];
-}
+function create() {
+  // Pre-generate all tetromino block textures
+  preGenerateAllBlockTextures(this);
 
-class MainMenu extends Phaser.Scene {
-  constructor() {
-    super({ key: "MainMenu" });
+  if (!this.textures.exists("particle")) {
+    let canvas = this.textures.createCanvas("particle", 1, 1).getContext("2d");
+    canvas.fillStyle = "#fff";
+    canvas.fillRect(0, 0, 1, 1);
+    this.textures.get("particle").refresh();
   }
 
-  create() {
-    const arrowKeyGlyphs = {
-      LEFT: "←",
-      RIGHT: "→",
-      UP: "↑",
-      DOWN: "↓",
-    };
-
-    const formatKey = (key) => {
-      return arrowKeyGlyphs[key] || key;
-    };
-
-    this.add
-      .text(352, 100, "Ambitetris", {
-        font: "64px Arial",
-        fill: "#ffffff",
-      })
-      .setOrigin(0.5);
-
-    this.add
-      .text(
-        352,
-        200,
-        `Left Hand: ${formatKey(controls.L.left)}, ${formatKey(controls.L.right)}, ${formatKey(controls.L.down)}, ${formatKey(controls.L.rotate)}`,
-        {
-          font: "32px Arial",
-          fill: "#ffffff",
-        },
-      )
-      .setOrigin(0.5);
-
-    this.add
-      .text(
-        352,
-        250,
-        `Right Hand: ${formatKey(controls.R.left)}, ${formatKey(controls.R.right)}, ${formatKey(controls.R.down)}, ${formatKey(controls.R.rotate)}`,
-        {
-          font: "32px Arial",
-          fill: "#ffffff",
-        },
-      )
-      .setOrigin(0.5);
-
-    const startButton = this.add
-      .text(352, 400, "Start Game", {
-        font: "48px Arial",
-        fill: "#00ff00",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
-
-    startButton.on("pointerdown", () => {
-      this.scene.start("Game");
-    });
-
-    const optionsButton = this.add
-      .text(352, 500, "Options", {
-        font: "48px Arial",
-        fill: "#ffff00",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
-
-    optionsButton.on("pointerdown", () => {
-      this.scene.start("Options");
-    });
-  }
-}
-
-let controls = {
-  L: {
+  cursorsLeft = this.input.keyboard.addKeys({
     left: "C",
     right: "B",
     down: "V",
     rotate: "G",
-  },
-  R: {
+  });
+  cursorsRight = this.input.keyboard.addKeys({
     left: "J",
     right: "L",
     down: "K",
     rotate: "I",
-  },
-};
+  });
 
-class Options extends Phaser.Scene {
-  constructor() {
-    super({ key: "Options" });
-  }
-
-  create() {
-    this.add
-      .text(352, 50, "Options", {
-        font: "48px Arial",
-        fill: "#ffffff",
-      })
-      .setOrigin(0.5);
-
-    let yPos = 120;
-    for (const side of ["L", "R"]) {
-      this.add
-        .text(352, yPos, `Hand: ${side === "L" ? "Left" : "Right"}`)
-        .setOrigin(0.5);
-      yPos += 40;
-      for (const action of ["left", "right", "down", "rotate"]) {
-        const key = controls[side][action];
-        const text = this.add
-          .text(352, yPos, `${action}: ${key}`)
-          .setOrigin(0.5)
-          .setInteractive();
-
-        text.on("pointerdown", () => {
-          text.setText(`${action}: ...`);
-          this.input.keyboard.once("keydown", (event) => {
-            controls[side][action] = event.key.toUpperCase();
-            text.setText(`${action}: ${controls[side][action]}`);
-          });
-        });
-        yPos += 40;
-      }
+  this.input.keyboard.on("keydown", function (event) {
+    if (
+      ["C", "B", "V", "F", "J", "L", "K", "I"].includes(event.key.toUpperCase())
+    ) {
+      event.preventDefault();
     }
+  });
 
-    const backButton = this.add
-      .text(352, 550, "Back", {
-        font: "48px Arial",
-        fill: "#ff0000",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
+  this.input.keyboard.on("keydown-C", () => {
+    leftKeysHeld.left = true;
+  });
+  this.input.keyboard.on("keyup-C", () => {
+    leftKeysHeld.left = false;
+  });
+  this.input.keyboard.on("keydown-B", () => {
+    leftKeysHeld.right = true;
+  });
+  this.input.keyboard.on("keyup-B", () => {
+    leftKeysHeld.right = false;
+  });
+  this.input.keyboard.on("keydown-V", () => {
+    leftKeysHeld.down = true;
+  });
+  this.input.keyboard.on("keyup-V", () => {
+    leftKeysHeld.down = false;
+  });
 
-    backButton.on("pointerdown", () => {
-      this.scene.start("MainMenu");
-    });
-  }
+  this.input.keyboard.on("keydown-SPACE", () => {
+    userPaused = !userPaused;
+    console.log(userPaused ? "Game Paused" : "Game Unpaused");
+    // If pausing, maybe visually indicate pause on screen if desired later
+  });
+
+  leftTetromino = spawnTetromino(this, "L");
+  rightTetromino = spawnTetromino(this, "R");
+  window.leftTetromino = leftTetromino;
+  window.rightTetromino = rightTetromino;
+
+  // Spawn ghost tetrominoes after active ones
+  leftGhostTetromino = spawnGhostTetromino(this, "L", leftTetromino);
+  rightGhostTetromino = spawnGhostTetromino(this, "R", rightTetromino);
+  window.leftGhostTetromino = leftGhostTetromino;
+  window.rightGhostTetromino = rightGhostTetromino;
 }
 
-class Game extends Phaser.Scene {
-  constructor() {
-    super({ key: "Game" });
+function update(time, delta) {
+  if (userPaused) return;
+
+  const leftTetromino = window.leftTetromino;
+  const rightTetromino = window.rightTetromino;
+
+  handleInput(this, delta);
+
+  // Re-fetch ghost references AFTER input is handled, as rotation can destroy and recreate them.
+  const leftGhostTetromino = window.leftGhostTetromino;
+  const rightGhostTetromino = window.rightGhostTetromino;
+
+  // Update ghost positions before movement and drop
+  if (leftTetromino && leftGhostTetromino) {
+    updateGhostTetromino(leftTetromino, leftGhostTetromino, rightTetromino);
+  }
+  if (rightTetromino && rightGhostTetromino) {
+    updateGhostTetromino(rightTetromino, rightGhostTetromino, leftTetromino);
   }
 
-  create() {
-    const playArea = this.add.graphics();
-    playArea.fillStyle(0x222222, 1);
-    playArea.fillRect(
-      PLAY_AREA_X_OFFSET * BLOCK_SIZE,
-      0,
-      COLS * BLOCK_SIZE,
-      ROWS * BLOCK_SIZE,
-    );
-    playArea.setDepth(-1);
+  dropTimerLeft += delta;
+  dropTimerRight += delta;
 
-    // Pre-generate all tetromino block textures
-    preGenerateAllBlockTextures(this);
+  let leftInterval = fastDropLeft ? 40 : 500;
+  let rightInterval = fastDropRight ? 40 : 500;
 
-    if (!this.textures.exists("particle")) {
-      let canvas = this.textures
-        .createCanvas("particle", 1, 1)
-        .getContext("2d");
-      canvas.fillStyle = "#fff";
-      canvas.fillRect(0, 0, 1, 1);
-      this.textures.get("particle").refresh();
-    }
-
-    cursorsLeft = this.input.keyboard.addKeys(controls.L);
-    cursorsRight = this.input.keyboard.addKeys(controls.R);
-
-    this.input.keyboard.on("keydown", function (event) {
-      if (
-        ["C", "B", "V", "F", "J", "L", "K", "I"].includes(
-          event.key.toUpperCase(),
-        )
-      ) {
-        event.preventDefault();
-      }
-    });
-
-    this.input.keyboard.on("keydown-C", () => {
-      leftKeysHeld.left = true;
-    });
-    this.input.keyboard.on("keyup-C", () => {
-      leftKeysHeld.left = false;
-    });
-    this.input.keyboard.on("keydown-B", () => {
-      leftKeysHeld.right = true;
-    });
-    this.input.keyboard.on("keyup-B", () => {
-      leftKeysHeld.right = false;
-    });
-    this.input.keyboard.on("keydown-V", () => {
-      leftKeysHeld.down = true;
-    });
-    this.input.keyboard.on("keyup-V", () => {
-      leftKeysHeld.down = false;
-    });
-
-    this.input.keyboard.on("keydown-SPACE", () => {
-      userPaused = !userPaused;
-      console.log(userPaused ? "Game Paused" : "Game Unpaused");
-      // If pausing, maybe visually indicate pause on screen if desired later
-    });
-
-    // Initialize piece previews
-    for (let i = 0; i < 3; i++) {
-      leftPreview.push(getRandomTetrominoType());
-      rightPreview.push(getRandomTetrominoType());
-    }
-
-    leftTetromino = spawnTetromino(this, "L");
-    rightTetromino = spawnTetromino(this, "R");
-    window.leftTetromino = leftTetromino;
-    window.rightTetromino = rightTetromino;
-
-    // Spawn ghost tetrominoes after active ones
-    leftGhostTetromino = spawnGhostTetromino(this, "L", leftTetromino);
-    rightGhostTetromino = spawnGhostTetromino(this, "R", rightTetromino);
-    window.leftGhostTetromino = leftGhostTetromino;
-    window.rightGhostTetromino = rightGhostTetromino;
-
-    this.scoreText = this.add.text(16, 16, "Score: 0", {
-      fontSize: "20px",
-      fill: "#fff",
-    });
-    this.linesText = this.add.text(16, 40, "Lines: 0", {
-      fontSize: "20px",
-      fill: "#fff",
-    });
+  if (dropTimerLeft > leftInterval) {
+    moveDown(leftTetromino, "L");
+    dropTimerLeft = 0;
   }
-
-  update(time, delta) {
-    if (userPaused) return;
-
-    const leftTetromino = window.leftTetromino;
-    const rightTetromino = window.rightTetromino;
-
-    handleInput(this, delta);
-
-    // Re-fetch ghost references AFTER input is handled, as rotation can destroy and recreate them.
-    const leftGhostTetromino = window.leftGhostTetromino;
-    const rightGhostTetromino = window.rightGhostTetromino;
-
-    drawPreviews(this);
-
-    // Update ghost positions before movement and drop
-    if (leftTetromino && leftGhostTetromino) {
-      updateGhostTetromino(leftTetromino, leftGhostTetromino, rightTetromino);
-    }
-    if (rightTetromino && rightGhostTetromino) {
-      updateGhostTetromino(rightTetromino, rightGhostTetromino, leftTetromino);
-    }
-
-    dropTimerLeft += delta;
-    dropTimerRight += delta;
-
-    let leftInterval = fastDropLeft
-      ? 40
-      : Math.max(100, 500 - linesCleared * 10);
-    let rightInterval = fastDropRight
-      ? 40
-      : Math.max(100, 500 - linesCleared * 10);
-
-    if (dropTimerLeft > leftInterval) {
-      moveDown(leftTetromino, "L");
-      dropTimerLeft = 0;
-    }
-    if (dropTimerRight > rightInterval) {
-      moveDown(rightTetromino, "R");
-      dropTimerRight = 0;
-    }
+  if (dropTimerRight > rightInterval) {
+    moveDown(rightTetromino, "R");
+    dropTimerRight = 0;
   }
 }
 
@@ -1451,89 +1145,6 @@ function handleInput(scene, delta) {
   }
 }
 
-let previewSprites = { L: [], R: [] };
-
-function drawPreviews(scene) {
-  // Clear existing preview sprites
-  previewSprites.L.forEach((c) => c.destroy());
-  previewSprites.R.forEach((c) => c.destroy());
-  previewSprites.L = [];
-  previewSprites.R = [];
-
-  const PREVIEW_SCALE = 0.6;
-
-  // Draw left preview
-  leftPreview.forEach((type, index) => {
-    const tet = TETROMINOES[type];
-    const shape = tet.blocks[0];
-    const container = scene.add.container(
-      (PLAY_AREA_X_OFFSET * BLOCK_SIZE) / 2,
-      (2 + index * 4) * BLOCK_SIZE,
-    );
-    previewSprites.L.push(container);
-
-    let minX = 4,
-      maxX = 0,
-      minY = 4,
-      maxY = 0;
-    for (let i = 0; i < 4; i++) {
-      minX = Math.min(minX, shape[i][0]);
-      maxX = Math.max(maxX, shape[i][0]);
-      minY = Math.min(minY, shape[i][1]);
-      maxY = Math.max(maxY, shape[i][1]);
-    }
-    const shapeWidth = maxX - minX + 1;
-    const shapeHeight = maxY - minY + 1;
-
-    for (let i = 0; i < 4; i++) {
-      const key = getBlockTextureKey("L", type, 0, i, false);
-      const sprite = scene.add.sprite(
-        (shape[i][0] - minX - shapeWidth / 2 + 0.5) * BLOCK_SIZE,
-        (shape[i][1] - minY - shapeHeight / 2 + 0.5) * BLOCK_SIZE,
-        key,
-      );
-      container.add(sprite);
-    }
-    container.setScale(PREVIEW_SCALE);
-  });
-
-  // Draw right preview
-  rightPreview.forEach((type, index) => {
-    const tet = TETROMINOES[type];
-    const shape = tet.blocks[0];
-    const container = scene.add.container(
-      (PLAY_AREA_X_OFFSET + COLS) * BLOCK_SIZE +
-        (PLAY_AREA_X_OFFSET * BLOCK_SIZE) / 2,
-      (1 + index * 3) * BLOCK_SIZE,
-    );
-    previewSprites.R.push(container);
-
-    let minX = 4,
-      maxX = 0,
-      minY = 4,
-      maxY = 0;
-    for (let i = 0; i < 4; i++) {
-      minX = Math.min(minX, shape[i][0]);
-      maxX = Math.max(maxX, shape[i][0]);
-      minY = Math.min(minY, shape[i][1]);
-      maxY = Math.max(maxY, shape[i][1]);
-    }
-    const shapeWidth = maxX - minX + 1;
-    const shapeHeight = maxY - minY + 1;
-
-    for (let i = 0; i < 4; i++) {
-      const key = getBlockTextureKey("R", type, 0, i, false);
-      const sprite = scene.add.sprite(
-        (shape[i][0] - minX - shapeWidth / 2 + 0.5) * BLOCK_SIZE,
-        (shape[i][1] - minY - shapeHeight / 2 + 0.5) * BLOCK_SIZE,
-        key,
-      );
-      container.add(sprite);
-    }
-    container.setScale(PREVIEW_SCALE);
-  });
-}
-
 function clearFullLines(scene) {
   paused = true;
   let clearedRows = [];
@@ -1546,16 +1157,6 @@ function clearFullLines(scene) {
     paused = false;
     return;
   }
-
-  // Scoring
-  const scorePerLine = [0, 100, 300, 500, 800]; // 0, Single, Double, Triple, Quad
-  score += scorePerLine[clearedRows.length];
-  linesCleared += clearedRows.length;
-
-  // Update score display
-  scene.scoreText.setText(`Score: ${score}`);
-  scene.linesText.setText(`Lines: ${linesCleared}`);
-
   let isAmbiClear = false;
   for (let row of clearedRows) {
     let leftUsed = false,

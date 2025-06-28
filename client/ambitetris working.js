@@ -651,7 +651,8 @@ function moveDown(tetromino, side) {
         currentRight.rotation,
       )
     ) {
-      tetromino.scene.scene.start("MainMenu");
+      alert("Game Over!");
+      location.reload();
       return;
     }
   }
@@ -1094,287 +1095,132 @@ const REPEAT_INTERVAL = 40;
 let leftKeysHeld = { left: false, right: false, down: false };
 let paused = false;
 let userPaused = false;
-let score = 0;
-let linesCleared = 0;
 
 function getRandomTetrominoType() {
   const types = Object.keys(TETROMINOES);
   return types[Math.floor(Math.random() * types.length)];
 }
 
-class MainMenu extends Phaser.Scene {
-  constructor() {
-    super({ key: "MainMenu" });
+function create() {
+  const playArea = this.add.graphics();
+  playArea.fillStyle(0x222222, 1);
+  playArea.fillRect(
+    PLAY_AREA_X_OFFSET * BLOCK_SIZE,
+    0,
+    COLS * BLOCK_SIZE,
+    ROWS * BLOCK_SIZE,
+  );
+  playArea.setDepth(-1);
+
+  // Pre-generate all tetromino block textures
+  preGenerateAllBlockTextures(this);
+
+  if (!this.textures.exists("particle")) {
+    let canvas = this.textures.createCanvas("particle", 1, 1).getContext("2d");
+    canvas.fillStyle = "#fff";
+    canvas.fillRect(0, 0, 1, 1);
+    this.textures.get("particle").refresh();
   }
 
-  create() {
-    const arrowKeyGlyphs = {
-      LEFT: "←",
-      RIGHT: "→",
-      UP: "↑",
-      DOWN: "↓",
-    };
-
-    const formatKey = (key) => {
-      return arrowKeyGlyphs[key] || key;
-    };
-
-    this.add
-      .text(352, 100, "Ambitetris", {
-        font: "64px Arial",
-        fill: "#ffffff",
-      })
-      .setOrigin(0.5);
-
-    this.add
-      .text(
-        352,
-        200,
-        `Left Hand: ${formatKey(controls.L.left)}, ${formatKey(controls.L.right)}, ${formatKey(controls.L.down)}, ${formatKey(controls.L.rotate)}`,
-        {
-          font: "32px Arial",
-          fill: "#ffffff",
-        },
-      )
-      .setOrigin(0.5);
-
-    this.add
-      .text(
-        352,
-        250,
-        `Right Hand: ${formatKey(controls.R.left)}, ${formatKey(controls.R.right)}, ${formatKey(controls.R.down)}, ${formatKey(controls.R.rotate)}`,
-        {
-          font: "32px Arial",
-          fill: "#ffffff",
-        },
-      )
-      .setOrigin(0.5);
-
-    const startButton = this.add
-      .text(352, 400, "Start Game", {
-        font: "48px Arial",
-        fill: "#00ff00",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
-
-    startButton.on("pointerdown", () => {
-      this.scene.start("Game");
-    });
-
-    const optionsButton = this.add
-      .text(352, 500, "Options", {
-        font: "48px Arial",
-        fill: "#ffff00",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
-
-    optionsButton.on("pointerdown", () => {
-      this.scene.start("Options");
-    });
-  }
-}
-
-let controls = {
-  L: {
+  cursorsLeft = this.input.keyboard.addKeys({
     left: "C",
     right: "B",
     down: "V",
     rotate: "G",
-  },
-  R: {
+  });
+  cursorsRight = this.input.keyboard.addKeys({
     left: "J",
     right: "L",
     down: "K",
     rotate: "I",
-  },
-};
+  });
 
-class Options extends Phaser.Scene {
-  constructor() {
-    super({ key: "Options" });
-  }
-
-  create() {
-    this.add
-      .text(352, 50, "Options", {
-        font: "48px Arial",
-        fill: "#ffffff",
-      })
-      .setOrigin(0.5);
-
-    let yPos = 120;
-    for (const side of ["L", "R"]) {
-      this.add
-        .text(352, yPos, `Hand: ${side === "L" ? "Left" : "Right"}`)
-        .setOrigin(0.5);
-      yPos += 40;
-      for (const action of ["left", "right", "down", "rotate"]) {
-        const key = controls[side][action];
-        const text = this.add
-          .text(352, yPos, `${action}: ${key}`)
-          .setOrigin(0.5)
-          .setInteractive();
-
-        text.on("pointerdown", () => {
-          text.setText(`${action}: ...`);
-          this.input.keyboard.once("keydown", (event) => {
-            controls[side][action] = event.key.toUpperCase();
-            text.setText(`${action}: ${controls[side][action]}`);
-          });
-        });
-        yPos += 40;
-      }
+  this.input.keyboard.on("keydown", function (event) {
+    if (
+      ["C", "B", "V", "F", "J", "L", "K", "I"].includes(event.key.toUpperCase())
+    ) {
+      event.preventDefault();
     }
+  });
 
-    const backButton = this.add
-      .text(352, 550, "Back", {
-        font: "48px Arial",
-        fill: "#ff0000",
-      })
-      .setOrigin(0.5)
-      .setInteractive();
+  this.input.keyboard.on("keydown-C", () => {
+    leftKeysHeld.left = true;
+  });
+  this.input.keyboard.on("keyup-C", () => {
+    leftKeysHeld.left = false;
+  });
+  this.input.keyboard.on("keydown-B", () => {
+    leftKeysHeld.right = true;
+  });
+  this.input.keyboard.on("keyup-B", () => {
+    leftKeysHeld.right = false;
+  });
+  this.input.keyboard.on("keydown-V", () => {
+    leftKeysHeld.down = true;
+  });
+  this.input.keyboard.on("keyup-V", () => {
+    leftKeysHeld.down = false;
+  });
 
-    backButton.on("pointerdown", () => {
-      this.scene.start("MainMenu");
-    });
+  this.input.keyboard.on("keydown-SPACE", () => {
+    userPaused = !userPaused;
+    console.log(userPaused ? "Game Paused" : "Game Unpaused");
+    // If pausing, maybe visually indicate pause on screen if desired later
+  });
+
+  // Initialize piece previews
+  for (let i = 0; i < 3; i++) {
+    leftPreview.push(getRandomTetrominoType());
+    rightPreview.push(getRandomTetrominoType());
   }
+
+  leftTetromino = spawnTetromino(this, "L");
+  rightTetromino = spawnTetromino(this, "R");
+  window.leftTetromino = leftTetromino;
+  window.rightTetromino = rightTetromino;
+
+  // Spawn ghost tetrominoes after active ones
+  leftGhostTetromino = spawnGhostTetromino(this, "L", leftTetromino);
+  rightGhostTetromino = spawnGhostTetromino(this, "R", rightTetromino);
+  window.leftGhostTetromino = leftGhostTetromino;
+  window.rightGhostTetromino = rightGhostTetromino;
 }
 
-class Game extends Phaser.Scene {
-  constructor() {
-    super({ key: "Game" });
+function update(time, delta) {
+  if (userPaused) return;
+
+  const leftTetromino = window.leftTetromino;
+  const rightTetromino = window.rightTetromino;
+
+  handleInput(this, delta);
+
+  // Re-fetch ghost references AFTER input is handled, as rotation can destroy and recreate them.
+  const leftGhostTetromino = window.leftGhostTetromino;
+  const rightGhostTetromino = window.rightGhostTetromino;
+
+  drawPreviews(this);
+
+  // Update ghost positions before movement and drop
+  if (leftTetromino && leftGhostTetromino) {
+    updateGhostTetromino(leftTetromino, leftGhostTetromino, rightTetromino);
+  }
+  if (rightTetromino && rightGhostTetromino) {
+    updateGhostTetromino(rightTetromino, rightGhostTetromino, leftTetromino);
   }
 
-  create() {
-    const playArea = this.add.graphics();
-    playArea.fillStyle(0x222222, 1);
-    playArea.fillRect(
-      PLAY_AREA_X_OFFSET * BLOCK_SIZE,
-      0,
-      COLS * BLOCK_SIZE,
-      ROWS * BLOCK_SIZE,
-    );
-    playArea.setDepth(-1);
+  dropTimerLeft += delta;
+  dropTimerRight += delta;
 
-    // Pre-generate all tetromino block textures
-    preGenerateAllBlockTextures(this);
+  let leftInterval = fastDropLeft ? 40 : 500;
+  let rightInterval = fastDropRight ? 40 : 500;
 
-    if (!this.textures.exists("particle")) {
-      let canvas = this.textures
-        .createCanvas("particle", 1, 1)
-        .getContext("2d");
-      canvas.fillStyle = "#fff";
-      canvas.fillRect(0, 0, 1, 1);
-      this.textures.get("particle").refresh();
-    }
-
-    cursorsLeft = this.input.keyboard.addKeys(controls.L);
-    cursorsRight = this.input.keyboard.addKeys(controls.R);
-
-    this.input.keyboard.on("keydown", function (event) {
-      if (
-        ["C", "B", "V", "F", "J", "L", "K", "I"].includes(
-          event.key.toUpperCase(),
-        )
-      ) {
-        event.preventDefault();
-      }
-    });
-
-    this.input.keyboard.on("keydown-C", () => {
-      leftKeysHeld.left = true;
-    });
-    this.input.keyboard.on("keyup-C", () => {
-      leftKeysHeld.left = false;
-    });
-    this.input.keyboard.on("keydown-B", () => {
-      leftKeysHeld.right = true;
-    });
-    this.input.keyboard.on("keyup-B", () => {
-      leftKeysHeld.right = false;
-    });
-    this.input.keyboard.on("keydown-V", () => {
-      leftKeysHeld.down = true;
-    });
-    this.input.keyboard.on("keyup-V", () => {
-      leftKeysHeld.down = false;
-    });
-
-    this.input.keyboard.on("keydown-SPACE", () => {
-      userPaused = !userPaused;
-      console.log(userPaused ? "Game Paused" : "Game Unpaused");
-      // If pausing, maybe visually indicate pause on screen if desired later
-    });
-
-    // Initialize piece previews
-    for (let i = 0; i < 3; i++) {
-      leftPreview.push(getRandomTetrominoType());
-      rightPreview.push(getRandomTetrominoType());
-    }
-
-    leftTetromino = spawnTetromino(this, "L");
-    rightTetromino = spawnTetromino(this, "R");
-    window.leftTetromino = leftTetromino;
-    window.rightTetromino = rightTetromino;
-
-    // Spawn ghost tetrominoes after active ones
-    leftGhostTetromino = spawnGhostTetromino(this, "L", leftTetromino);
-    rightGhostTetromino = spawnGhostTetromino(this, "R", rightTetromino);
-    window.leftGhostTetromino = leftGhostTetromino;
-    window.rightGhostTetromino = rightGhostTetromino;
-
-    this.scoreText = this.add.text(16, 16, "Score: 0", {
-      fontSize: "20px",
-      fill: "#fff",
-    });
-    this.linesText = this.add.text(16, 40, "Lines: 0", {
-      fontSize: "20px",
-      fill: "#fff",
-    });
+  if (dropTimerLeft > leftInterval) {
+    moveDown(leftTetromino, "L");
+    dropTimerLeft = 0;
   }
-
-  update(time, delta) {
-    if (userPaused) return;
-
-    const leftTetromino = window.leftTetromino;
-    const rightTetromino = window.rightTetromino;
-
-    handleInput(this, delta);
-
-    // Re-fetch ghost references AFTER input is handled, as rotation can destroy and recreate them.
-    const leftGhostTetromino = window.leftGhostTetromino;
-    const rightGhostTetromino = window.rightGhostTetromino;
-
-    drawPreviews(this);
-
-    // Update ghost positions before movement and drop
-    if (leftTetromino && leftGhostTetromino) {
-      updateGhostTetromino(leftTetromino, leftGhostTetromino, rightTetromino);
-    }
-    if (rightTetromino && rightGhostTetromino) {
-      updateGhostTetromino(rightTetromino, rightGhostTetromino, leftTetromino);
-    }
-
-    dropTimerLeft += delta;
-    dropTimerRight += delta;
-
-    let leftInterval = fastDropLeft
-      ? 40
-      : Math.max(100, 500 - linesCleared * 10);
-    let rightInterval = fastDropRight
-      ? 40
-      : Math.max(100, 500 - linesCleared * 10);
-
-    if (dropTimerLeft > leftInterval) {
-      moveDown(leftTetromino, "L");
-      dropTimerLeft = 0;
-    }
-    if (dropTimerRight > rightInterval) {
-      moveDown(rightTetromino, "R");
-      dropTimerRight = 0;
-    }
+  if (dropTimerRight > rightInterval) {
+    moveDown(rightTetromino, "R");
+    dropTimerRight = 0;
   }
 }
 
@@ -1504,7 +1350,7 @@ function drawPreviews(scene) {
     const container = scene.add.container(
       (PLAY_AREA_X_OFFSET + COLS) * BLOCK_SIZE +
         (PLAY_AREA_X_OFFSET * BLOCK_SIZE) / 2,
-      (1 + index * 3) * BLOCK_SIZE,
+      (2 + index * 4) * BLOCK_SIZE,
     );
     previewSprites.R.push(container);
 
@@ -1546,16 +1392,6 @@ function clearFullLines(scene) {
     paused = false;
     return;
   }
-
-  // Scoring
-  const scorePerLine = [0, 100, 300, 500, 800]; // 0, Single, Double, Triple, Quad
-  score += scorePerLine[clearedRows.length];
-  linesCleared += clearedRows.length;
-
-  // Update score display
-  scene.scoreText.setText(`Score: ${score}`);
-  scene.linesText.setText(`Lines: ${linesCleared}`);
-
   let isAmbiClear = false;
   for (let row of clearedRows) {
     let leftUsed = false,

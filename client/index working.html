@@ -24,7 +24,7 @@
                 width: 704, // (4 + 14 + 4) blocks wide * 32
                 height: 640,
                 backgroundColor: "#111",
-                scene: [MainMenu, Options, Game], // Add all scenes
+                scene: { create, update }, // Disable default key captures to allow our custom key handling
                 input: {
                     keyboard: {
                         capture: [],
