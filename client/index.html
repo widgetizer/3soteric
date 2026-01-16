@@ -1,38 +1,22 @@
 <!doctype html>
 <html>
-    <head>
-        <title>Ambitetris</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
         <style>
             canvas {
                 display: block;
                 margin: auto;
-            }
-            body {
-                font-family: "Arial", sans-serif;
+                font-family: "Poppins", "Arial", sans-serif;
                 background-color: #010101;
                 margin: 0;
                 padding: 0;
             }
         </style>
     </head>
-    <body>
-        <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.js"></script>
+    <script src="utils.js"></script>
+        <script src="ui.js"></script>
         <script src="ambitetris.js"></script>
-        <script>
-            const config = {
-                type: Phaser.AUTO,
-                width: 704, // (4 + 14 + 4) blocks wide * 32
-                height: 640,
-                backgroundColor: "#111",
-                scene: [MainMenu, Options, Game], // Add all scenes
-                input: {
-                    keyboard: {
-                        capture: [],
-                    },
-                },
-            };
-
-            const game = new Phaser.Game(config);
-        </script>
+        <script src="main.js"></script>
     </body>
 </html>

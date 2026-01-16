@@ -729,8 +729,8 @@ function lockBothTetrominoes(t1, t2) {
   );
 
   if (
-    !canPlace(newLeft, newLeft.x, newLeft.y, newLeft.rotation) ||
-    !canPlace(newRight, newRight.x, newRight.y, newRight.rotation)
+    !canPlace(newLeft, newLeft.x, newLeft.y, newLeft.rotation, newRight) ||
+    !canPlace(newRight, newRight.x, newRight.y, newRight.rotation, newLeft)
   ) {
     alert("Game Over!");
     location.reload();
@@ -1091,8 +1091,6 @@ let moveTimers = {
 const INITIAL_DELAY = 200;
 const REPEAT_INTERVAL = 40;
 
-let leftKeysHeld = { left: false, right: false, down: false };
-let paused = false;
 let userPaused = false;
 let score = 0;
 let linesCleared = 0;
@@ -1108,17 +1106,6 @@ class MainMenu extends Phaser.Scene {
   }
 
   create() {
-    const arrowKeyGlyphs = {
-      LEFT: "←",
-      RIGHT: "→",
-      UP: "↑",
-      DOWN: "↓",
-    };
-
-    const formatKey = (key) => {
-      return arrowKeyGlyphs[key] || key;
-    };
-
     this.add
       .text(352, 100, "Ambitetris", {
         font: "64px Arial",
@@ -1178,16 +1165,16 @@ class MainMenu extends Phaser.Scene {
 
 let controls = {
   L: {
-    left: "C",
-    right: "B",
-    down: "V",
-    rotate: "G",
+    left: "A",
+    right: "D",
+    down: "S",
+    rotate: "W",
   },
   R: {
-    left: "J",
-    right: "L",
-    down: "K",
-    rotate: "I",
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    down: "ArrowDown",
+    rotate: "ArrowUp",
   },
 };
 
@@ -1213,15 +1200,15 @@ class Options extends Phaser.Scene {
       for (const action of ["left", "right", "down", "rotate"]) {
         const key = controls[side][action];
         const text = this.add
-          .text(352, yPos, `${action}: ${key}`)
+          .text(352, yPos, `${action}: ${formatKey(key)}`)
           .setOrigin(0.5)
           .setInteractive();
 
         text.on("pointerdown", () => {
           text.setText(`${action}: ...`);
           this.input.keyboard.once("keydown", (event) => {
-            controls[side][action] = event.key.toUpperCase();
-            text.setText(`${action}: ${controls[side][action]}`);
+            controls[side][action] = event.key;
+            text.setText(`${action}: ${formatKey(controls[side][action])}`);
           });
         });
         yPos += 40;
@@ -1273,35 +1260,17 @@ class Game extends Phaser.Scene {
     cursorsLeft = this.input.keyboard.addKeys(controls.L);
     cursorsRight = this.input.keyboard.addKeys(controls.R);
 
-    this.input.keyboard.on("keydown", function (event) {
-      if (
-        ["C", "B", "V", "F", "J", "L", "K", "I"].includes(
-          event.key.toUpperCase(),
-        )
-      ) {
+    this.input.keyboard.on("keydown", (event) => {
+      const allControls = [
+        ...Object.values(controls.L),
+        ...Object.values(controls.R),
+      ];
+      if (allControls.includes(event.key)) {
         event.preventDefault();
       }
     });
 
-    this.input.keyboard.on("keydown-C", () => {
-      leftKeysHeld.left = true;
-    });
-    this.input.keyboard.on("keyup-C", () => {
-      leftKeysHeld.left = false;
-    });
-    this.input.keyboard.on("keydown-B", () => {
-      leftKeysHeld.right = true;
-    });
-    this.input.keyboard.on("keyup-B", () => {
-      leftKeysHeld.right = false;
-    });
-    this.input.keyboard.on("keydown-V", () => {
-      leftKeysHeld.down = true;
-    });
-    this.input.keyboard.on("keyup-V", () => {
-      leftKeysHeld.down = false;
-    });
-
+    this.pauseScreen = createPauseScreen(this);
     this.input.keyboard.on("keydown-SPACE", () => {
       userPaused = !userPaused;
       console.log(userPaused ? "Game Paused" : "Game Unpaused");
@@ -1384,7 +1353,8 @@ function handleInput(scene, delta) {
 
   if (!leftTetromino || !rightTetromino) return; // Safety check
 
-  if (leftKeysHeld.left) {
+  // Left Hand Controls (WASD)
+  if (cursorsLeft.left.isDown) {
     moveTimers.left.left += delta;
     if (
       moveTimers.left.left === delta ||
@@ -1397,7 +1367,7 @@ function handleInput(scene, delta) {
   } else {
     moveTimers.left.left = 0;
   }
-  if (leftKeysHeld.right) {
+  if (cursorsLeft.right.isDown) {
     moveTimers.left.right += delta;
     if (
       moveTimers.left.right === delta ||
@@ -1410,13 +1380,14 @@ function handleInput(scene, delta) {
   } else {
     moveTimers.left.right = 0;
   }
-  fastDropLeft = leftKeysHeld.down;
+  fastDropLeft = cursorsLeft.down.isDown;
 
   if (cursorsLeft.rotate.isDown) {
     rotateTetromino(leftTetromino);
     cursorsLeft.rotate.reset();
   }
 
+  // Right Hand Controls (Arrow Keys)
   if (cursorsRight.left.isDown) {
     moveTimers.right.left += delta;
     if (
