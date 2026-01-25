@@ -33,24 +33,22 @@ export class Grid {
 
     drawGrid() {
         this.gridGraphics.clear();
-        this.gridGraphics.lineStyle(1, 0xFFFFFF, 0.3);
+        
+        // Background Gradient
+        // Stand out against #1b263b (Main BG)
+        // Slightly darker vertical gradient: Dark Blue-Grey to Near Black
+        const cTop = 0x161e2e;
+        const cBot = 0x0a0e14;
+        
+        const width = this.width * this.cellSize;
+        const height = this.height * this.cellSize;
+        
+        this.gridGraphics.fillGradientStyle(cTop, cTop, cBot, cBot, 1, 1, 1, 1);
+        this.gridGraphics.fillRect(this.offsetX, this.offsetY, width, height);
 
-        const startX = this.offsetX;
-        const startY = this.offsetY;
-
-        // Vertical lines
-        for (let x = 0; x <= this.width; x++) {
-            this.gridGraphics.moveTo(startX + x * this.cellSize, startY);
-            this.gridGraphics.lineTo(startX + x * this.cellSize, startY + this.height * this.cellSize);
-        }
-
-        // Horizontal lines
-        for (let y = 0; y <= this.height; y++) {
-            this.gridGraphics.moveTo(startX, startY + y * this.cellSize);
-            this.gridGraphics.lineTo(startX + this.width * this.cellSize, startY + y * this.cellSize);
-        }
-
-        this.gridGraphics.strokePath();
+        // Optional: Draw subtle border?
+        this.gridGraphics.lineStyle(2, 0x334455, 0.5);
+        this.gridGraphics.strokeRect(this.offsetX, this.offsetY, width, height);
     }
 
     // Convert grid coordinates to world coordinates (for placing pieces)
@@ -75,7 +73,7 @@ export class Grid {
     placePiece(x: number, y: number, shape: number[][], color: number, isRounded: boolean = false): { linesCleared: number; animationDuration: number } {
         const rows = shape.length;
         const cols = shape[0].length;
-        const blockSize = 28;
+        const blockSize = this.cellSize; // No gaps (was 28)
 
         for (let r = 0; r < shape.length; r++) {
             for (let c = 0; c < shape[r].length; c++) {
@@ -88,6 +86,9 @@ export class Grid {
                         const pos = this.gridToWorld(bx, by);
                         
                         const g = this.scene.add.graphics();
+                        
+                        // Position graphics at the center of the cell so scaling works from center
+                        g.setPosition(pos.x + 15, pos.y + 15);
                         
                         // Calculate neighbors within the shape to preserve the "fused" look of the piece
                         const hasTop = (r > 0) && !!shape[r - 1][c];
@@ -105,8 +106,8 @@ export class Grid {
                         GraphicsUtils.drawBlock(
                             this.scene,
                             g,
-                            pos.x + 15,
-                            pos.y + 15,
+                            0, // Local 0,0 (since g is positioned at center)
+                            0, // Local 0,0
                             blockSize,
                             color,
                             neighbors,
@@ -138,73 +139,78 @@ export class Grid {
     }
 
     animateClear(rows: number[]) {
-        console.log("Animate clear for rows:", rows);
-        // 1. Logical Clear (Immediate, so other player can move into space)
-        // We need to shift the board array down.
-        // We'll create a new board state but keep the visuals for animation.
-        const newBoard = Array(this.height).fill(null).map(() => Array(this.width).fill(0));
-        let newY = this.height - 1;
-        
-        // This mapping tells us where each OLD row went (or -1 if cleared)
-        const rowMapping: number[] = Array(this.height).fill(-1);
+        const fadeDuration = 250;
+        const moveDuration = 300;
+        const cellSize = this.cellSize;
 
+        // 1. Identify blocks -> Fade or Drop
+        const blocksToFade: Phaser.GameObjects.Graphics[] = [];
+        const blocksToDrop: { g: Phaser.GameObjects.Graphics, dropCount: number }[] = [];
+        
+        let dropCount = 0;
+        
+        // Scan from bottom to top
         for (let y = this.height - 1; y >= 0; y--) {
-            if (!rows.includes(y)) {
-                newBoard[newY] = [...this.board[y]]; // Copy row
-                rowMapping[y] = newY;
-                newY--;
-            }
-        }
-        
-        // Update logical board immediately
-        this.board = newBoard;
-
-        // 2. Visual Animation
-        // Animate cleared rows disappearing
-        rows.forEach(y => {
-            for (let x = 0; x < this.width; x++) {
-                const block = this.visualBoard[y][x];
-                if (block) {
-                    this.scene.tweens.add({
-                        targets: block,
-                        scaleX: 0,
-                        scaleY: 0,
-                        alpha: 0,
-                        duration: 300,
-                        onComplete: () => block.destroy()
-                    });
-                }
-            }
-        });
-
-        // Animate remaining rows falling down
-        // We need to update visualBoard to match newBoard structure at the END of animation?
-        // Actually, we can update the array structure now, but keep the objects references
-        
-        const newVisualBoard = Array(this.height).fill(null).map(() => Array(this.width).fill(null));
-        
-        for (let y = 0; y < this.height; y++) {
-            const destY = rowMapping[y];
-            if (destY !== -1) {
-                // Move visual row to new position in array
+            if (rows.includes(y)) {
+                dropCount++;
                 for (let x = 0; x < this.width; x++) {
                     const block = this.visualBoard[y][x];
-                    if (block) {
-                       newVisualBoard[destY][x] = block;
-                       // Animate position
-                       const newPos = this.gridToWorld(x, destY);
-                       this.scene.tweens.add({
-                           targets: block,
-                           y: newPos.y + 15, // Center offset
-                           duration: 300,
-                           delay: 100, // Small delay after clear starts
-                           ease: 'Bounce.Out' // "impressive"
-                       });
+                    if (block instanceof Phaser.GameObjects.Graphics) {
+                         blocksToFade.push(block);
                     }
                 }
+            } else if (dropCount > 0) {
+                 // Non-cleared row above a clear, needs to drop
+                 for (let x = 0; x < this.width; x++) {
+                    const block = this.visualBoard[y][x];
+                    if (block instanceof Phaser.GameObjects.Graphics) {
+                        blocksToDrop.push({ g: block, dropCount: dropCount });
+                    }
+                 }
+            }
+        }
+
+        // 2. Animate Fades (Cleared Rows)
+        if (blocksToFade.length > 0) {
+            this.scene.tweens.add({
+                targets: blocksToFade,
+                alpha: 0,
+                scale: 0.8, 
+                duration: fadeDuration,
+                onComplete: (_tween, targets) => {
+                    targets.forEach((t: Phaser.GameObjects.Graphics) => t.destroy());
+                }
+            });
+        }
+
+        // 3. Animate Drops (Falling Rows)
+        for (const item of blocksToDrop) {
+            this.scene.tweens.add({
+                targets: item.g,
+                y: item.g.y + (item.dropCount * cellSize),
+                duration: moveDuration,
+                ease: 'Quad.easeOut', 
+                delay: 50
+            });
+        }
+
+        // 4. Update Logic Maps Immediately
+        // (We shift the references so future logic looks at the correct board state)
+        const newBoard: number[][] = Array(this.height).fill(null).map(() => Array(this.width).fill(0));
+        const newVisuals: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics | null)[][] = Array(this.height).fill(null).map(() => Array(this.width).fill(null));
+
+        let destY = this.height - 1;
+        for (let y = this.height - 1; y >= 0; y--) {
+            if (!rows.includes(y)) {
+                for (let x = 0; x < this.width; x++) {
+                    newBoard[destY][x] = this.board[y][x];
+                    newVisuals[destY][x] = this.visualBoard[y][x];
+                }
+                destY--;
             }
         }
         
-        this.visualBoard = newVisualBoard;
+        this.board = newBoard;
+        this.visualBoard = newVisuals;
     }
 }

@@ -16,38 +16,87 @@ export type Action = typeof Action[keyof typeof Action];
 export class InputHandler {
     private scene: Phaser.Scene;
     
-    private keyListener: (event: KeyboardEvent) => void;
+    private keyDownListener: (event: KeyboardEvent) => void;
+    private keyUpListener: (event: KeyboardEvent) => void;
+
+    private keysHeld: Set<string> = new Set();
+    private moveTimers: Map<string, number> = new Map();
+
+    private readonly REPEAT_DELAY_MS = 200; // DAS: Delay before auto-repeat starts
+    private readonly REPEAT_RATE_MS = 50;   // ARR: Interval between repeats (Fast for drop)
+
+    // Keys that support continuous holding
+    private readonly CONTINUOUS_KEYS = new Set([
+        'KeyA', 'KeyD', 'KeyS',
+        'ArrowLeft', 'ArrowRight', 'ArrowDown'
+    ]);
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
-        this.keyListener = this.handleKeyDown.bind(this);
+        this.keyDownListener = this.handleKeyDown.bind(this);
+        this.keyUpListener = this.handleKeyUp.bind(this);
 
-        // Use window listener to ensure we catch events even if Phaser focus is iffy,
-        // and to handle Restart when game might be paused (though we should handle that carefully).
-        window.addEventListener('keydown', this.keyListener);
+        window.addEventListener('keydown', this.keyDownListener);
+        window.addEventListener('keyup', this.keyUpListener);
     }
 
     private handleKeyDown(event: KeyboardEvent) {
+        if (!this.keysHeld.has(event.code)) {
+            this.keysHeld.add(event.code);
+            
+            // Trigger immediate action
+            this.dispatchAction(event.code);
+
+            // Init timer for continuous keys
+            if (this.CONTINUOUS_KEYS.has(event.code)) {
+                this.moveTimers.set(event.code, this.REPEAT_DELAY_MS);
+            }
+        }
+    }
+
+    private handleKeyUp(event: KeyboardEvent) {
+        this.keysHeld.delete(event.code);
+        this.moveTimers.delete(event.code);
+    }
+
+    update(_time: number, delta: number) {
+        for (const code of this.keysHeld) {
+            if (this.CONTINUOUS_KEYS.has(code)) {
+                let timer = this.moveTimers.get(code) || 0;
+                timer -= delta;
+                
+                if (timer <= 0) {
+                    this.dispatchAction(code);
+                    this.moveTimers.set(code, this.REPEAT_RATE_MS);
+                } else {
+                    this.moveTimers.set(code, timer);
+                }
+            }
+        }
+    }
+
+    private dispatchAction(code: string) {
         // Player 1
-        if (event.code === 'KeyA') this.scene.events.emit('p1-move', Action.MOVE_LEFT);
-        if (event.code === 'KeyD') this.scene.events.emit('p1-move', Action.MOVE_RIGHT);
-        if (event.code === 'KeyS') this.scene.events.emit('p1-move', Action.MOVE_DOWN);
-        if (event.code === 'KeyQ') this.scene.events.emit('p1-rotate', Action.ROTATE_CCW);
-        if (event.code === 'KeyE') this.scene.events.emit('p1-rotate', Action.ROTATE_CW);
+        if (code === 'KeyA') this.scene.events.emit('p1-move', Action.MOVE_LEFT);
+        if (code === 'KeyD') this.scene.events.emit('p1-move', Action.MOVE_RIGHT);
+        if (code === 'KeyS') this.scene.events.emit('p1-move', Action.MOVE_DOWN);
+        if (code === 'KeyQ') this.scene.events.emit('p1-rotate', Action.ROTATE_CCW);
+        if (code === 'KeyE') this.scene.events.emit('p1-rotate', Action.ROTATE_CW);
 
         // Player 2
-        if (event.code === 'ArrowLeft') this.scene.events.emit('p2-move', Action.MOVE_LEFT);
-        if (event.code === 'ArrowRight') this.scene.events.emit('p2-move', Action.MOVE_RIGHT);
-        if (event.code === 'ArrowDown') this.scene.events.emit('p2-move', Action.MOVE_DOWN);
-        if (event.code === 'ArrowUp') this.scene.events.emit('p2-rotate', Action.ROTATE_CW); 
-        if (event.code === 'KeyM') this.scene.events.emit('p2-rotate', Action.ROTATE_CCW); 
+        if (code === 'ArrowLeft') this.scene.events.emit('p2-move', Action.MOVE_LEFT);
+        if (code === 'ArrowRight') this.scene.events.emit('p2-move', Action.MOVE_RIGHT);
+        if (code === 'ArrowDown') this.scene.events.emit('p2-move', Action.MOVE_DOWN);
+        if (code === 'ArrowUp') this.scene.events.emit('p2-rotate', Action.ROTATE_CW); 
+        if (code === 'KeyM') this.scene.events.emit('p2-rotate', Action.ROTATE_CCW); 
         
         // Global
-        if (event.code === 'KeyR') this.scene.events.emit('game-restart', Action.RESTART);
-        if (event.code === 'KeyP' || event.code === 'Escape') this.scene.events.emit('game-pause', Action.PAUSE);
+        if (code === 'KeyR') this.scene.events.emit('game-restart', Action.RESTART);
+        if (code === 'KeyP' || code === 'Escape') this.scene.events.emit('game-pause', Action.PAUSE);
     }
     
     destroy() {
-         window.removeEventListener('keydown', this.keyListener);
+         window.removeEventListener('keydown', this.keyDownListener);
+         window.removeEventListener('keyup', this.keyUpListener);
     }
 }

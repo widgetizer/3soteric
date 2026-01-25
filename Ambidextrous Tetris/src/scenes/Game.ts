@@ -7,6 +7,8 @@ import { GraphicsUtils } from '../game/GraphicsUtils.ts';
 
 export class Game extends Phaser.Scene {
     private grid!: Grid;
+    private gridWidth: number = 14;
+    private ghostsEnabled: boolean = true;
     private p1Piece!: ActivePiece | undefined;
     private p2Piece!: ActivePiece | undefined;
     private score: number = 0;
@@ -25,7 +27,20 @@ export class Game extends Phaser.Scene {
     }
 
     create() {
-        this.grid = new Grid(this, 14, 20);
+        // Reset Game State
+        this.score = 0;
+        this.dropTimer = 0;
+        this.isPaused = false;
+        this.isGameOver = false;
+
+        this.events.on('shutdown', this.shutdown, this);
+
+        // Load Settings
+        const savedWidth = localStorage.getItem('gridWidth');
+        this.gridWidth = savedWidth ? parseInt(savedWidth, 10) : 14;
+        this.ghostsEnabled = localStorage.getItem('showGhosts') !== 'false';
+
+        this.grid = new Grid(this, this.gridWidth, 20);
         this.grid.drawGrid();
 
         // Init next types
@@ -36,18 +51,18 @@ export class Game extends Phaser.Scene {
         this.createNextPreviews();
 
         // Spawn Pieces
-        this.p1Piece = this.spawnPiece(3, 0);
-        this.p2Piece = this.spawnPiece(10, 0);
+        this.p1Piece = this.spawnPiece(this.getSpawnX(true, this.p1NextType), 0);
+        this.p2Piece = this.spawnPiece(this.getSpawnX(false, this.p2NextType), 0);
 
         // Initialize Input
         this.inputHandler = new InputHandler(this);
 
         // Input Events
         this.events.on('p1-move', (action: Action) => this.handleMove(this.p1Piece, this.p2Piece, action, -1)); // -1 for p1 push direction logic if needed? No, just direction.
-        this.events.on('p1-rotate', (action: Action) => this.p1Piece?.rotate(action === Action.ROTATE_CW));
-
+        this.events.on('p1-rotate', (action: Action) => this.p1Piece?.rotate(action === Action.ROTATE_CW, this.p2Piece));
+        
         this.events.on('p2-move', (action: Action) => this.handleMove(this.p2Piece, this.p1Piece, action, 1));
-        this.events.on('p2-rotate', (action: Action) => this.p2Piece?.rotate(action === Action.ROTATE_CW));
+        this.events.on('p2-rotate', (action: Action) => this.p2Piece?.rotate(action === Action.ROTATE_CW, this.p1Piece));
         
         // Restart Event
         this.events.on('game-restart', () => this.restartGame());
@@ -77,6 +92,36 @@ export class Game extends Phaser.Scene {
         }
 
         if (dx !== 0 || dy !== 0) {
+            
+            // --- DIAGNOSTIC LOGGING ---
+            // Help diagnose why overlap occurs (Collision Check returning False when it should be True)
+            if (mover && other) {
+                // Only log when pieces are close to avoid spam
+                const dist = Math.abs(mover.y - other.y) + Math.abs(mover.x - other.x);
+                if (dist < 6) {
+                    const willCollide = this.checkPieceCollision(mover, other, dx, dy);
+                    const aCells = this.getCellsAt(mover, mover.x + dx, mover.y + dy);
+                    const bCells = other.getOccupiedCells();
+                    
+                    // Manual verification
+                    const overlap = aCells.find(ac => bCells.some(bc => ac.x === bc.x && ac.y === bc.y));
+
+                    if (!willCollide && overlap) {
+                        console.error("%cCRITICAL: Collision Check Failed but Overlap Exists!", "color: red; font-size: 16px;");
+                        console.log("   Mover:", mover === this.p1Piece ? 'P1' : 'P2');
+                        console.log("   Attempting Move To:", mover.x + dx, mover.y + dy);
+                        console.log("   Other Piece At:", other.x, other.y);
+                        console.log("   Overlap Cell:", overlap);
+                        console.log("   A Cells (Projected):", JSON.stringify(aCells));
+                        console.log("   B Cells (Current):", JSON.stringify(bCells));
+                    } else if (!willCollide) {
+                         // Log close calls to verify coordinates
+                         console.log(`Move Safe: P${mover === this.p1Piece ? '1' : '2'} -> (${mover.x + dx}, ${mover.y + dy}) | Other: (${other.x}, ${other.y})`);
+                    }
+                }
+            }
+            // --------------------------
+
             // Check if move hits the other piece
             if (this.checkPieceCollision(mover, other, dx, dy)) {
                 // Pushing logic (Horizontal OR Vertical)
@@ -87,6 +132,13 @@ export class Game extends Phaser.Scene {
                 }
             } else {
                 mover.move(dx, dy);
+                
+                // Safety Re-check: Did we just step onto the other piece?
+                // This catches rare cases (or bugs) where the initial collision check missed.
+                if (this.checkPieceCollision(mover, other, 0, 0)) {
+                    // Overlap detected! Revert the move.
+                    mover.move(-dx, -dy);
+                }
             }
         }
     }
@@ -117,8 +169,13 @@ export class Game extends Phaser.Scene {
     private dropTimer: number = 0;
     private dropInterval: number = 1000; // 1 second drop speed
 
-    update(_time: number, delta: number) {
+    update(time: number, delta: number) {
         if (this.isPaused) return;
+
+        // Update Input Handler for continuous key presses (DAS/ARR)
+        if (this.inputHandler) {
+            this.inputHandler.update(time, delta);
+        }
 
         this.dropTimer += delta;
         if (this.dropTimer >= this.dropInterval) {
@@ -126,6 +183,12 @@ export class Game extends Phaser.Scene {
             if (this.p1Piece) this.applyGravity(this.p1Piece);
             if (this.p2Piece) this.applyGravity(this.p2Piece);
         }
+
+        // Update Ghosts after all movement
+        const p1Obs = this.p2Piece ? this.p2Piece.getOccupiedCells() : [];
+        const p2Obs = this.p1Piece ? this.p1Piece.getOccupiedCells() : [];
+        this.p1Piece?.updateGhost(p1Obs);
+        this.p2Piece?.updateGhost(p2Obs);
     }
 
     applyGravity(piece: ActivePiece) {
@@ -162,11 +225,21 @@ export class Game extends Phaser.Scene {
 
         this.time.delayedCall(spawnDelay, () => {
             if (isP1) {
-                this.p1Piece = this.spawnPiece(3, 0);
+                this.p1Piece = this.spawnPiece(this.getSpawnX(true, this.p1NextType), 0);
             } else {
-                this.p2Piece = this.spawnPiece(10, 0);
+                this.p2Piece = this.spawnPiece(this.getSpawnX(false, this.p2NextType), 0);
             }
         });
+    }
+
+    getSpawnX(isP1: boolean, type: TetrominoType): number {
+        const center = this.gridWidth * (isP1 ? 0.25 : 0.75);
+        let offset = 1;
+        if (type === 'I') offset = 2;
+        // O is 2x2, offset 1 is fine (center 1.5 -> left 0.5? No 2x2 centered is x, x+1. Center is x+0.5).
+        // If center is 2.5. X=1.5 -> 1. Occupies 1,2. Center 1.5. Perfectly centered. 
+        
+        return Math.floor(center - offset);
     }
 
     spawnPiece(x: number, y: number): ActivePiece {
@@ -176,7 +249,7 @@ export class Game extends Phaser.Scene {
         const types: TetrominoType[] = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
         const nextType = types[Math.floor(Math.random() * types.length)];
 
-        if (x < 7) {
+        if (x < this.gridWidth / 2) {
             // P1
             type = this.p1NextType;
             this.p1NextType = nextType;
@@ -188,8 +261,9 @@ export class Game extends Phaser.Scene {
             if (this.p2NextPreview) this.updatePreview(this.p2NextPreview, this.p2NextType);
         }
 
-        const isRounded = (x < 7); // P1 is left side (or we can use strict player check)
+        const isRounded = (x < this.gridWidth / 2); // P1 is left side
         const piece = new ActivePiece(this, this.grid, x, y, type, isRounded);
+        piece.setShowGhost(this.ghostsEnabled);
 
         // Check game over
         if (piece.checkCollision(x, y, 0)) {
@@ -209,8 +283,8 @@ export class Game extends Phaser.Scene {
         this.p1NextPreview = this.add.container(50, 100);
         this.p2NextPreview = this.add.container(650, 100);
 
-        this.add.text(50, 70, 'P1 Next', { fontSize: '16px', color: '#fff' });
-        this.add.text(650, 70, 'P2 Next', { fontSize: '16px', color: '#fff' });
+        // this.add.text(50, 70, 'P1 Next', { fontSize: '16px', color: '#fff' });
+        // this.add.text(650, 70, 'P2 Next', { fontSize: '16px', color: '#fff' });
 
         this.updatePreview(this.p1NextPreview, this.p1NextType);
         this.updatePreview(this.p2NextPreview, this.p2NextType);
@@ -224,7 +298,7 @@ export class Game extends Phaser.Scene {
         const rows = shape.length;
         const cols = shape[0].length;
         const isRounded = (container === this.p1NextPreview); // P1 is rounded
-        const blockSize = 18; // Smaller preview size
+        const blockSize = 20; // Exact fit for 20px spacing (was 18)
 
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
@@ -266,10 +340,13 @@ export class Game extends Phaser.Scene {
 
     restartGame() {
         console.log('Restarting Game...');
+        this.scene.restart();
+    }
+
+    shutdown() {
         if (this.inputHandler) {
             this.inputHandler.destroy();
         }
-        this.scene.restart();
     }
 
     returnToMenu() {

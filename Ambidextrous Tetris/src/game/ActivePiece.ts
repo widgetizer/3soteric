@@ -14,7 +14,10 @@ export class ActivePiece {
     public shape: number[][];
     public color: number;
     private container: Phaser.GameObjects.Container;
+    private ghostContainer: Phaser.GameObjects.Container;
     private blocks: Phaser.GameObjects.Graphics[] = [];
+    
+    public ghostEnabled: boolean = true;
 
     public isRounded: boolean;
 
@@ -31,18 +34,22 @@ export class ActivePiece {
         this.color = def.color;
         this.shape = def.shape;
 
-        this.container = this.scene.add.container(0, 0);
+        this.ghostContainer = this.scene.add.container(0, 0);
+        this.ghostContainer.setAlpha(0.5); // Global ghost alpha? Or handled in draw
+        this.container = this.scene.add.container(0, 0); // Active on top
         this.render();
         this.updatePosition();
     }
 
     render() {
         this.container.removeAll(true);
+        this.ghostContainer.removeAll(true);
         this.blocks = [];
+        
         const currentShape = this.getRotatedShape();
         const rows = currentShape.length;
         const cols = currentShape[0].length;
-        const blockSize = 28;
+        const blockSize = 30; // No gaps (was 28)
 
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
@@ -50,6 +57,7 @@ export class ActivePiece {
                     const x = c * 30 + 15; // Center x
                     const y = r * 30 + 15; // Center y
                     
+                    // Render Active Block
                     const g = this.scene.add.graphics();
                     
                     // Neighbor checks (within the shape)
@@ -75,12 +83,29 @@ export class ActivePiece {
                         neighbors,
                         this.isRounded
                     );
-
                     this.container.add(g);
                     this.blocks.push(g);
+
+                    // Render Ghost Block (Only if enabled?)
+                    // We render it always and toggle container visibility.
+                    // Actually, if disabled, save performance? 
+                    // Let's render always for simplicity of updates.
+                    const ghostG = this.scene.add.graphics();
+                    GraphicsUtils.drawGhostBlock(
+                        this.scene,
+                        ghostG,
+                        x,
+                        y,
+                        blockSize,
+                        neighbors,
+                        this.isRounded
+                    );
+                    this.ghostContainer.add(ghostG);
                 }
             }
         }
+        
+        this.ghostContainer.setVisible(this.ghostEnabled);
     }
 
     updatePosition() {
@@ -118,18 +143,21 @@ export class ActivePiece {
         return false;
     }
 
-    rotate(cw: boolean) {
+    rotate(cw: boolean, otherPiece?: ActivePiece) {
         const newRotation = (this.rotation + (cw ? 1 : 3)) % 4; // +3 is equivalent to -1 mod 4
+
+        // Get obstacles from the other piece to check against
+        const obstacles = otherPiece ? otherPiece.getOccupiedCells() : [];
 
         // Basic wall kick (try original, then +/- 1 x)
         // TODO: Implement SRS
-        if (!this.checkCollision(this.x, this.y, newRotation)) {
+        if (!this.checkCollision(this.x, this.y, newRotation, obstacles)) {
             this.rotation = newRotation;
             this.render();
             return;
         }
         // Simple wall kick right
-        if (!this.checkCollision(this.x + 1, this.y, newRotation)) {
+        if (!this.checkCollision(this.x + 1, this.y, newRotation, obstacles)) {
             this.x += 1;
             this.rotation = newRotation;
             this.render();
@@ -137,7 +165,7 @@ export class ActivePiece {
             return;
         }
         // Simple wall kick left
-        if (!this.checkCollision(this.x - 1, this.y, newRotation)) {
+        if (!this.checkCollision(this.x - 1, this.y, newRotation, obstacles)) {
             this.x -= 1;
             this.rotation = newRotation;
             this.render();
@@ -146,14 +174,25 @@ export class ActivePiece {
         }
     }
 
-    // Check if the piece at (tx, ty) with trot collides with grid
-    checkCollision(tx: number, ty: number, trot: number): boolean {
+    // Check if the piece at (tx, ty) with trot collides with grid OR obstacles
+    checkCollision(tx: number, ty: number, trot: number, obstacles: {x: number, y: number}[] = []): boolean {
         const shape = this.getShapeAtRotation(trot);
         for (let r = 0; r < shape.length; r++) {
             for (let c = 0; c < shape[r].length; c++) {
                 if (shape[r][c]) {
-                    if (this.grid.isOccupied(tx + c, ty + r)) {
+                    const wx = tx + c;
+                    const wy = ty + r;
+
+                    // Grid Collision
+                    if (this.grid.isOccupied(wx, wy)) {
                         return true;
+                    }
+
+                    // Obstacle Collision (Other Piece)
+                    for (const obs of obstacles) {
+                        if (obs.x === wx && obs.y === wy) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -176,14 +215,41 @@ export class ActivePiece {
         for (let r = 0; r < shape.length; r++) {
             for (let c = 0; c < shape[r].length; c++) {
                 if (shape[r][c]) {
-                    cells.push({ x: offsetX + c, y: offsetY + r });
+                    // Enforce integer coordinates to prevent floating point mismatch
+                    cells.push({ x: Math.round(offsetX + c), y: Math.round(offsetY + r) });
                 }
             }
         }
         return cells;
     }
 
+    updateGhost(obstacles: {x: number, y: number}[] = []) {
+        if (!this.ghostEnabled) {
+            this.ghostContainer.setVisible(false);
+            return;
+        }
+        this.ghostContainer.setVisible(true);
+
+        const dropY = this.getDropY(obstacles);
+        const pos = this.grid.gridToWorld(this.x, dropY);
+        this.ghostContainer.setPosition(pos.x, pos.y);
+    }
+
+    private getDropY(obstacles: {x: number, y: number}[]): number {
+        let dy = this.y;
+        while (!this.checkCollision(this.x, dy + 1, this.rotation, obstacles)) {
+            dy++;
+        }
+        return dy;
+    }
+
+    setShowGhost(enabled: boolean) {
+        this.ghostEnabled = enabled;
+        this.ghostContainer.setVisible(enabled);
+    }
+
     destroy() {
+        this.ghostContainer.destroy();
         this.container.destroy();
     }
 }
