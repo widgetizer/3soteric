@@ -1,17 +1,67 @@
 import Phaser from 'phaser';
 
 export const Action = {
-    MOVE_LEFT: 0,
-    MOVE_RIGHT: 1,
-    MOVE_DOWN: 2,
-    ROTATE_CW: 3,
-    ROTATE_CCW: 4,
-    DROP: 5,
-    RESTART: 6,
-    PAUSE: 7
+    // Player 1
+    P1_MOVE_LEFT: 0,
+    P1_MOVE_RIGHT: 1,
+    P1_MOVE_DOWN: 2,
+    P1_ROTATE_CW: 3,
+    P1_ROTATE_CCW: 4,
+
+    // Player 2
+    P2_MOVE_LEFT: 5,
+    P2_MOVE_RIGHT: 6,
+    P2_MOVE_DOWN: 7,
+    P2_ROTATE_CW: 8,
+    P2_ROTATE_CCW: 9,
+
+    // Global
+    GAME_RESTART: 10,
+    GAME_PAUSE: 11
 } as const;
 
 export type Action = typeof Action[keyof typeof Action];
+
+export const DEFAULT_CONTROLS: Record<string, Action> = {
+    // Player 1
+    'KeyA': Action.P1_MOVE_LEFT,
+    'KeyD': Action.P1_MOVE_RIGHT,
+    'KeyS': Action.P1_MOVE_DOWN,
+    'KeyQ': Action.P1_ROTATE_CCW,
+    'KeyE': Action.P1_ROTATE_CW,
+
+    // Player 2
+    'ArrowLeft': Action.P2_MOVE_LEFT,
+    'ArrowRight': Action.P2_MOVE_RIGHT,
+    'ArrowDown': Action.P2_MOVE_DOWN,
+    'ArrowUp': Action.P2_ROTATE_CW,
+    'KeyM': Action.P2_ROTATE_CCW,
+
+    // Global
+    'KeyR': Action.GAME_RESTART,
+    'KeyP': Action.GAME_PAUSE,
+    'Escape': Action.GAME_PAUSE
+};
+
+export const CONTINUOUS_ACTIONS = new Set<Action>([
+    Action.P1_MOVE_LEFT, Action.P1_MOVE_RIGHT, Action.P1_MOVE_DOWN,
+    Action.P2_MOVE_LEFT, Action.P2_MOVE_RIGHT, Action.P2_MOVE_DOWN
+]);
+
+// Helper for UI grouping
+export const BINDABLE_ACTIONS = [
+    { label: 'Move Left', action: Action.P1_MOVE_LEFT, group: 'Left Hand' },
+    { label: 'Move Right', action: Action.P1_MOVE_RIGHT, group: 'Left Hand' },
+    { label: 'Move Down', action: Action.P1_MOVE_DOWN, group: 'Left Hand' },
+    { label: 'Rotate CW', action: Action.P1_ROTATE_CW, group: 'Left Hand' },
+    { label: 'Rotate CCW', action: Action.P1_ROTATE_CCW, group: 'Left Hand' },
+    
+    { label: 'Move Left', action: Action.P2_MOVE_LEFT, group: 'Right Hand' },
+    { label: 'Move Right', action: Action.P2_MOVE_RIGHT, group: 'Right Hand' },
+    { label: 'Move Down', action: Action.P2_MOVE_DOWN, group: 'Right Hand' },
+    { label: 'Rotate CW', action: Action.P2_ROTATE_CW, group: 'Right Hand' },
+    { label: 'Rotate CCW', action: Action.P2_ROTATE_CCW, group: 'Right Hand' },
+];
 
 export class InputHandler {
     private scene: Phaser.Scene;
@@ -22,33 +72,72 @@ export class InputHandler {
     private keysHeld: Set<string> = new Set();
     private moveTimers: Map<string, number> = new Map();
 
-    private readonly REPEAT_DELAY_MS = 200; // DAS: Delay before auto-repeat starts
-    private readonly REPEAT_RATE_MS = 50;   // ARR: Interval between repeats (Fast for drop)
+    private readonly REPEAT_DELAY_MS = 200; 
+    private readonly REPEAT_RATE_MS = 50;   
 
-    // Keys that support continuous holding
-    private readonly CONTINUOUS_KEYS = new Set([
-        'KeyA', 'KeyD', 'KeyS',
-        'ArrowLeft', 'ArrowRight', 'ArrowDown'
-    ]);
+    // Map KeyCode -> Action
+    private keyMap: Map<string, Action> = new Map();
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.keyDownListener = this.handleKeyDown.bind(this);
         this.keyUpListener = this.handleKeyUp.bind(this);
 
+        this.loadBindings();
+
         window.addEventListener('keydown', this.keyDownListener);
         window.addEventListener('keyup', this.keyUpListener);
     }
 
+    public loadBindings() {
+        this.keyMap.clear();
+        
+        const saved = localStorage.getItem('keyBindings');
+        let bindings = DEFAULT_CONTROLS;
+
+        if (saved) {
+            try {
+                bindings = JSON.parse(saved);
+            } catch (e) {
+                console.error("Failed to parse keybindings", e);
+            }
+        }
+
+        for (const [key, action] of Object.entries(bindings)) {
+            this.keyMap.set(key, action as Action);
+        }
+    }
+
+    public bindKey(key: string, action: Action) {
+        // Enforce: Remove this action from any other key first (one-to-one)
+        this.keyMap.forEach((val, k) => {
+            if (val === action) this.keyMap.delete(k);
+        });
+        
+        this.keyMap.set(key, action);
+    }
+
+    public getBindings(): Record<string, Action> {
+        const out: Record<string, Action> = {};
+        this.keyMap.forEach((action, key) => {
+            out[key] = action;
+        });
+        return out;
+    }
+
+    public saveBindings() {
+        localStorage.setItem('keyBindings', JSON.stringify(this.getBindings()));
+    }
+
     private handleKeyDown(event: KeyboardEvent) {
-        if (!this.keysHeld.has(event.code)) {
+        const action = this.keyMap.get(event.code);
+        
+        if (action !== undefined && !this.keysHeld.has(event.code)) {
             this.keysHeld.add(event.code);
             
-            // Trigger immediate action
-            this.dispatchAction(event.code);
+            this.dispatchAction(action);
 
-            // Init timer for continuous keys
-            if (this.CONTINUOUS_KEYS.has(event.code)) {
+            if (CONTINUOUS_ACTIONS.has(action)) {
                 this.moveTimers.set(event.code, this.REPEAT_DELAY_MS);
             }
         }
@@ -61,12 +150,13 @@ export class InputHandler {
 
     update(_time: number, delta: number) {
         for (const code of this.keysHeld) {
-            if (this.CONTINUOUS_KEYS.has(code)) {
+            const action = this.keyMap.get(code);
+            if (action !== undefined && CONTINUOUS_ACTIONS.has(action)) {
                 let timer = this.moveTimers.get(code) || 0;
                 timer -= delta;
                 
                 if (timer <= 0) {
-                    this.dispatchAction(code);
+                    this.dispatchAction(action);
                     this.moveTimers.set(code, this.REPEAT_RATE_MS);
                 } else {
                     this.moveTimers.set(code, timer);
@@ -75,24 +165,8 @@ export class InputHandler {
         }
     }
 
-    private dispatchAction(code: string) {
-        // Player 1
-        if (code === 'KeyA') this.scene.events.emit('p1-move', Action.MOVE_LEFT);
-        if (code === 'KeyD') this.scene.events.emit('p1-move', Action.MOVE_RIGHT);
-        if (code === 'KeyS') this.scene.events.emit('p1-move', Action.MOVE_DOWN);
-        if (code === 'KeyQ') this.scene.events.emit('p1-rotate', Action.ROTATE_CCW);
-        if (code === 'KeyE') this.scene.events.emit('p1-rotate', Action.ROTATE_CW);
-
-        // Player 2
-        if (code === 'ArrowLeft') this.scene.events.emit('p2-move', Action.MOVE_LEFT);
-        if (code === 'ArrowRight') this.scene.events.emit('p2-move', Action.MOVE_RIGHT);
-        if (code === 'ArrowDown') this.scene.events.emit('p2-move', Action.MOVE_DOWN);
-        if (code === 'ArrowUp') this.scene.events.emit('p2-rotate', Action.ROTATE_CW); 
-        if (code === 'KeyM') this.scene.events.emit('p2-rotate', Action.ROTATE_CCW); 
-        
-        // Global
-        if (code === 'KeyR') this.scene.events.emit('game-restart', Action.RESTART);
-        if (code === 'KeyP' || code === 'Escape') this.scene.events.emit('game-pause', Action.PAUSE);
+    private dispatchAction(action: Action) {
+        this.scene.events.emit('action', action);
     }
     
     destroy() {

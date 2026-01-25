@@ -86,11 +86,10 @@ export class ActivePiece {
                     this.container.add(g);
                     this.blocks.push(g);
 
-                    // Render Ghost Block (Only if enabled?)
-                    // We render it always and toggle container visibility.
-                    // Actually, if disabled, save performance? 
-                    // Let's render always for simplicity of updates.
+                    // Render Ghost Block
                     const ghostG = this.scene.add.graphics();
+                    const isSpooky = localStorage.getItem('spookyGhosts') === 'true';
+
                     GraphicsUtils.drawGhostBlock(
                         this.scene,
                         ghostG,
@@ -98,7 +97,8 @@ export class ActivePiece {
                         y,
                         blockSize,
                         neighbors,
-                        this.isRounded
+                        this.isRounded,
+                        isSpooky
                     );
                     this.ghostContainer.add(ghostG);
                 }
@@ -232,7 +232,19 @@ export class ActivePiece {
 
         const dropY = this.getDropY(obstacles);
         const pos = this.grid.gridToWorld(this.x, dropY);
-        this.ghostContainer.setPosition(pos.x, pos.y);
+        
+        const isSpooky = localStorage.getItem('spookyGhosts') === 'true';
+        let floatOffset = 0;
+        if (isSpooky) {
+            // Hovering effect
+            floatOffset = Math.sin(this.scene.time.now / 300) * 6;
+            // Also a faint pulse
+            this.ghostContainer.setAlpha(0.6 + Math.sin(this.scene.time.now / 500) * 0.2);
+        } else {
+            this.ghostContainer.setAlpha(0.5);
+        }
+
+        this.ghostContainer.setPosition(pos.x, pos.y + floatOffset);
     }
 
     private getDropY(obstacles: {x: number, y: number}[]): number {

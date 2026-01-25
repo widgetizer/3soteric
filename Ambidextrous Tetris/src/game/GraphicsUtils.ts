@@ -111,25 +111,76 @@ export class GraphicsUtils {
         y: number,
         size: number,
         neighbors: { top: boolean; bottom: boolean; left: boolean; right: boolean } | null,
-        isRounded: boolean
+        isRounded: boolean,
+        isSpooky: boolean = false
     ) {
-         g.lineStyle(2, 0xffffff, 0.4); // White outline
-         g.fillStyle(0xffffff, 0.1);    // Faint white fill
+        const radius = isRounded ? size * 0.36 : 0;
+        const half = size / 2;
+        const L = x - half;
+        const R = x + half;
+        const T = y - half;
+        const B = y + half;
 
-         if (isRounded && neighbors) {
-             const radius = size * 0.36;
-             const half = size / 2;
-             
-             const tl = (!neighbors.top && !neighbors.left) ? radius : 0;
-             const tr = (!neighbors.top && !neighbors.right) ? radius : 0;
-             const bl = (!neighbors.bottom && !neighbors.left) ? radius : 0;
-             const br = (!neighbors.bottom && !neighbors.right) ? radius : 0;
-             
-             g.fillRoundedRect(x - half, y - half, size, size, { tl, tr, bl, br });
-             g.strokeRoundedRect(x - half, y - half, size, size, { tl, tr, bl, br });
-         } else {
-             g.fillRect(x - size/2, y - size/2, size, size);
-             g.strokeRect(x - size/2, y - size/2, size, size);
-         }
+        // Spooky colors: Purple tint
+        const ghostColor = isSpooky ? 0xa855f7 : 0xffffff;
+        const fillAlpha = isSpooky ? 0.2 : 0.1;
+        const strokeAlpha = isSpooky ? 0.6 : 0.35;
+
+        const corners = {
+            tl: (neighbors && !neighbors.top && !neighbors.left) ? radius : 0,
+            tr: (neighbors && !neighbors.top && !neighbors.right) ? radius : 0,
+            bl: (neighbors && !neighbors.bottom && !neighbors.left) ? radius : 0,
+            br: (neighbors && !neighbors.bottom && !neighbors.right) ? radius : 0
+        };
+        // Fallback for isolated blocks
+        if (!neighbors) {
+            corners.tl = corners.tr = corners.bl = corners.br = radius;
+        }
+
+        // --- Fill ---
+        g.fillStyle(ghostColor, fillAlpha);
+        if (isRounded) {
+            g.fillRoundedRect(L, T, size, size, corners);
+        } else {
+            g.fillRect(L, T, size, size);
+        }
+
+        // --- Segmented Stroke (No Skeletons) ---
+        g.lineStyle(2, ghostColor, strokeAlpha);
+        
+        if (!neighbors) {
+            if (isRounded) g.strokeRoundedRect(L, T, size, size, radius);
+            else g.strokeRect(L, T, size, size);
+        } else {
+            // Draw exterior segments only
+            if (!neighbors.top) {
+                g.beginPath(); g.moveTo(L + corners.tl, T); g.lineTo(R - corners.tr, T); g.strokePath();
+            }
+            if (!neighbors.bottom) {
+                g.beginPath(); g.moveTo(L + corners.bl, B); g.lineTo(R - corners.br, B); g.strokePath();
+            }
+            if (!neighbors.left) {
+                g.beginPath(); g.moveTo(L, T + corners.tl); g.lineTo(L, B - corners.bl); g.strokePath();
+            }
+            if (!neighbors.right) {
+                g.beginPath(); g.moveTo(R, T + corners.tr); g.lineTo(R, B - corners.br); g.strokePath();
+            }
+
+            // External Corner Arcs
+            if (isRounded) {
+                const step = Math.PI / 2;
+                if (corners.tl > 0) { g.beginPath(); g.arc(L + radius, T + radius, radius, Math.PI, Math.PI + step); g.strokePath(); }
+                if (corners.tr > 0) { g.beginPath(); g.arc(R - radius, T + radius, radius, Math.PI + step, Math.PI * 2); g.strokePath(); }
+                if (corners.bl > 0) { g.beginPath(); g.arc(L + radius, B - radius, radius, Math.PI * 0.5, Math.PI); g.strokePath(); }
+                if (corners.br > 0) { g.beginPath(); g.arc(R - radius, B - radius, radius, 0, Math.PI * 0.5); g.strokePath(); }
+            }
+        }
+
+        // --- Spooky Mode (Eyes) ---
+        if (isSpooky && (!neighbors || !neighbors.top)) {
+            g.fillStyle(0x000000, 0.4);
+            g.fillCircle(x - 5, y - 2, 2.5);
+            g.fillCircle(x + 5, y - 2, 2.5);
+        }
     }
 }

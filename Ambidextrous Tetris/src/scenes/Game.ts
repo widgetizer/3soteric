@@ -29,6 +29,7 @@ export class Game extends Phaser.Scene {
     create() {
         // Reset Game State
         this.score = 0;
+        this.totalLines = 0;
         this.dropTimer = 0;
         this.isPaused = false;
         this.isGameOver = false;
@@ -57,39 +58,64 @@ export class Game extends Phaser.Scene {
         // Initialize Input
         this.inputHandler = new InputHandler(this);
 
-        // Input Events
-        this.events.on('p1-move', (action: Action) => this.handleMove(this.p1Piece, this.p2Piece, action, -1)); // -1 for p1 push direction logic if needed? No, just direction.
-        this.events.on('p1-rotate', (action: Action) => this.p1Piece?.rotate(action === Action.ROTATE_CW, this.p2Piece));
+        // Input Event
+        this.events.on('action', this.handleInput, this);
         
-        this.events.on('p2-move', (action: Action) => this.handleMove(this.p2Piece, this.p1Piece, action, 1));
-        this.events.on('p2-rotate', (action: Action) => this.p2Piece?.rotate(action === Action.ROTATE_CW, this.p1Piece));
+        // Restart Event (Optional: could handle inside handleInput but separate event is fine if dispatched manually)
+        // Check InputHandler: it emits 'action' with Action.GAME_RESTART
+        // So we handle it in handleInput.
         
-        // Restart Event
-        this.events.on('game-restart', () => this.restartGame());
-        this.events.on('game-pause', () => {
-           if (this.isGameOver) {
+        // Score UI
+        this.scoreText = this.add.text(10, 10, 'Score: 0', { 
+            fontFamily: 'Inter',
+            fontSize: '24px', 
+            color: '#fff',
+            stroke: '#0f172a',
+            strokeThickness: 2
+        });
+        
+        // Lines UI (Top Right)
+        const { width } = this.scale;
+        this.linesText = this.add.text(width - 20, 10, 'Lines: 0', { 
+            fontFamily: 'Inter',
+            fontSize: '24px', 
+            color: '#fff',
+            stroke: '#0f172a',
+            strokeThickness: 2
+        }).setOrigin(1, 0);
+    }
+    
+    private totalLines: number = 0;
+    private linesText!: Phaser.GameObjects.Text;
+
+    handleInput(action: Action) {
+        // Player 1
+        if (action === Action.P1_MOVE_LEFT) this.handleMove(this.p1Piece, this.p2Piece, -1, 0);
+        else if (action === Action.P1_MOVE_RIGHT) this.handleMove(this.p1Piece, this.p2Piece, 1, 0);
+        else if (action === Action.P1_MOVE_DOWN) this.handleMove(this.p1Piece, this.p2Piece, 0, 1);
+        else if (action === Action.P1_ROTATE_CCW) this.p1Piece?.rotate(false, this.p2Piece);
+        else if (action === Action.P1_ROTATE_CW) this.p1Piece?.rotate(true, this.p2Piece);
+
+        // Player 2
+        else if (action === Action.P2_MOVE_LEFT) this.handleMove(this.p2Piece, this.p1Piece, -1, 0);
+        else if (action === Action.P2_MOVE_RIGHT) this.handleMove(this.p2Piece, this.p1Piece, 1, 0);
+        else if (action === Action.P2_MOVE_DOWN) this.handleMove(this.p2Piece, this.p1Piece, 0, 1);
+        else if (action === Action.P2_ROTATE_CCW) this.p2Piece?.rotate(false, this.p1Piece);
+        else if (action === Action.P2_ROTATE_CW) this.p2Piece?.rotate(true, this.p1Piece);
+
+        // Global
+        else if (action === Action.GAME_RESTART) this.restartGame();
+        else if (action === Action.GAME_PAUSE) {
+             if (this.isGameOver) {
                this.returnToMenu();
            } else {
                this.togglePause();
            }
-        });
-
-        // Score UI
-        this.scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '24px', color: '#fff' });
+        }
     }
 
-    handleMove(mover: ActivePiece | undefined, other: ActivePiece | undefined, action: Action, _id: number) {
+    handleMove(mover: ActivePiece | undefined, other: ActivePiece | undefined, dx: number, dy: number) {
         if (this.isPaused || !mover || !other) return;
-
-        let dx = 0;
-        let dy = 0;
-
-        switch (action) {
-            case Action.MOVE_LEFT: dx = -1; break;
-            case Action.MOVE_RIGHT: dx = 1; break;
-            case Action.MOVE_DOWN: dy = 1; break;
-            case Action.DROP: break; // TODO
-        }
 
         if (dx !== 0 || dy !== 0) {
             
@@ -208,6 +234,10 @@ export class Game extends Phaser.Scene {
             // Simple scoring
             this.score += 100 * linesCleared * linesCleared;
             this.scoreText.setText(`Score: ${this.score}`);
+            
+            // Update Lines Counter
+            this.totalLines += linesCleared;
+            this.linesText.setText(`Lines: ${this.totalLines}`);
         }
 
         // Destroy active piece visual
@@ -272,9 +302,23 @@ export class Game extends Phaser.Scene {
             // Stop game
             this.scene.pause();
             const { width, height } = this.scale;
-            this.add.text(width/2, height/2, 'GAME OVER', { fontSize: '64px', color: '#ff0000' }).setOrigin(0.5);
-            this.add.text(width/2, height/2 + 80, 'Press R to Restart', { fontSize: '32px', color: '#ffffff' }).setOrigin(0.5);
-            this.add.text(width/2, height/2 + 130, 'Press ESC for Menu', { fontSize: '24px', color: '#aaaaaa' }).setOrigin(0.5);
+            this.add.text(width/2, height/2, 'GAME OVER', { 
+                fontFamily: 'Outfit',
+                fontSize: '64px', 
+                color: '#ef4444',
+                stroke: '#000',
+                strokeThickness: 6
+            }).setOrigin(0.5);
+            this.add.text(width/2, height/2 + 80, 'Press R to Restart', { 
+                fontFamily: 'Inter',
+                fontSize: '32px', 
+                color: '#ffffff' 
+            }).setOrigin(0.5);
+            this.add.text(width/2, height/2 + 130, 'Press ESC for Menu', { 
+                fontFamily: 'Inter',
+                fontSize: '24px', 
+                color: '#94a3b8' 
+            }).setOrigin(0.5);
         }
         return piece;
     }
@@ -365,7 +409,13 @@ export class Game extends Phaser.Scene {
             this.isPaused = true;
             this.physics.pause();
             const { width, height } = this.scale;
-            this.pauseText = this.add.text(width / 2, height / 2, 'PAUSED', { fontSize: '48px', color: '#fff' }).setOrigin(0.5);
+            this.pauseText = this.add.text(width / 2, height / 2, 'PAUSED', { 
+                fontFamily: 'Outfit',
+                fontSize: '64px', 
+                color: '#fff',
+                stroke: '#0f172a',
+                strokeThickness: 4
+            }).setOrigin(0.5);
         }
     }
 }

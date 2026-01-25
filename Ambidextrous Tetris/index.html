@@ -8,6 +8,27 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Hidden elements to force font loading before Phaser starts -->
+    <div
+      style="
+        font-family: &quot;Outfit&quot;;
+        visibility: hidden;
+        position: absolute;
+        left: -1000px;
+      "
+    >
+      Load Outfit
+    </div>
+    <div
+      style="
+        font-family: &quot;Inter&quot;;
+        visibility: hidden;
+        position: absolute;
+        left: -1000px;
+      "
+    >
+      Load Inter
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
