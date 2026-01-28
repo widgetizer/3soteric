@@ -287,26 +287,41 @@ export class Menu extends Phaser.Scene {
              localStorage.setItem('showGhosts', currentGhostState.toString());
         });
 
-        // Spooky Mode Toggle
-        const spookyEnabled = localStorage.getItem('spookyGhosts') === 'true';
-        let currentSpookyState = spookyEnabled;
 
-        const spookyText = this.add.text(width / 2, height / 2 + 100, `Spooky Mode: ${currentSpookyState ? 'ON' : 'OFF'}`, {
+
+        // Hold System Toggle (OFF -> PRIVATE -> SHARED)
+        const savedHoldMode = localStorage.getItem('holdMode');
+        // Migration/Default: 'enableHold' legacy support or default to PRIVATE
+        let currentHoldMode = savedHoldMode || 'PRIVATE'; 
+        if (savedHoldMode === null && localStorage.getItem('enableHold') === 'false') {
+             currentHoldMode = 'OFF';
+        }
+
+        const getHoldColor = (mode: string) => {
+            if (mode === 'OFF') return '#64748b'; // Slate
+            if (mode === 'SHARED') return '#a855f7'; // Purple (Special)
+            return '#4ade80'; // Green (Standard)
+        };
+
+        const holdText = this.add.text(width / 2, height / 2 + 140, `Hold System: ${currentHoldMode}`, {
             fontFamily: 'Inter',
             fontSize: '24px',
-            color: currentSpookyState ? '#a855f7' : '#64748b'
+            color: getHoldColor(currentHoldMode)
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
-            currentSpookyState = !currentSpookyState;
-            spookyText.setText(`Spooky Mode: ${currentSpookyState ? 'ON' : 'OFF'}`);
-            spookyText.setColor(currentSpookyState ? '#a855f7' : '#64748b');
-            localStorage.setItem('spookyGhosts', currentSpookyState.toString());
+            if (currentHoldMode === 'OFF') currentHoldMode = 'PRIVATE';
+            else if (currentHoldMode === 'PRIVATE') currentHoldMode = 'SHARED';
+            else currentHoldMode = 'OFF';
+
+            holdText.setText(`Hold System: ${currentHoldMode}`);
+            holdText.setColor(getHoldColor(currentHoldMode));
+            localStorage.setItem('holdMode', currentHoldMode);
         });
 
         // Close Button
-        const closeBtn = this.add.text(width/2, height/2 + 160, 'CLOSE', { 
+        const closeBtn = this.add.text(width/2, height/2 + 200, 'CLOSE', { 
             fontFamily: 'Outfit',
             fontSize: '24px', 
             color: '#0f172a',
@@ -317,6 +332,6 @@ export class Menu extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .on('pointerdown', () => this.settingsContainer.setVisible(false));
 
-        this.settingsContainer.add([bg, panel, title, this.gridWidthText, track, minLabel, maxLabel, handle, ghostText, spookyText, closeBtn]);
+        this.settingsContainer.add([bg, panel, title, this.gridWidthText, track, minLabel, maxLabel, handle, ghostText, holdText, closeBtn]);
     }
 }

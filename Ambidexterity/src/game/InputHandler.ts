@@ -15,10 +15,6 @@ export const Action = {
     P2_ROTATE_CW: 8,
     P2_ROTATE_CCW: 9,
 
-    // Hold
-    P1_HOLD: 12,
-    P2_HOLD: 13,
-
     // Global
     GAME_RESTART: 10,
     GAME_PAUSE: 11
@@ -31,8 +27,7 @@ export const DEFAULT_CONTROLS: Record<string, Action> = {
     'KeyA': Action.P1_MOVE_LEFT,
     'KeyD': Action.P1_MOVE_RIGHT,
     'KeyS': Action.P1_MOVE_DOWN,
-    'KeyQ': Action.P1_HOLD,       // New Default
-    'KeyZ': Action.P1_ROTATE_CCW, // New Default (was Q)
+    'KeyQ': Action.P1_ROTATE_CCW,
     'KeyE': Action.P1_ROTATE_CW,
 
     // Player 2
@@ -41,7 +36,6 @@ export const DEFAULT_CONTROLS: Record<string, Action> = {
     'ArrowDown': Action.P2_MOVE_DOWN,
     'ArrowUp': Action.P2_ROTATE_CW,
     'KeyM': Action.P2_ROTATE_CCW,
-    'Comma': Action.P2_HOLD,      // New Default
 
     // Global
     'KeyR': Action.GAME_RESTART,
@@ -61,14 +55,12 @@ export const BINDABLE_ACTIONS = [
     { label: 'Move Down', action: Action.P1_MOVE_DOWN, group: 'Left Hand' },
     { label: 'Rotate CW', action: Action.P1_ROTATE_CW, group: 'Left Hand' },
     { label: 'Rotate CCW', action: Action.P1_ROTATE_CCW, group: 'Left Hand' },
-    { label: 'Hold Piece', action: Action.P1_HOLD, group: 'Left Hand' },
     
     { label: 'Move Left', action: Action.P2_MOVE_LEFT, group: 'Right Hand' },
     { label: 'Move Right', action: Action.P2_MOVE_RIGHT, group: 'Right Hand' },
     { label: 'Move Down', action: Action.P2_MOVE_DOWN, group: 'Right Hand' },
     { label: 'Rotate CW', action: Action.P2_ROTATE_CW, group: 'Right Hand' },
     { label: 'Rotate CCW', action: Action.P2_ROTATE_CCW, group: 'Right Hand' },
-    { label: 'Hold Piece', action: Action.P2_HOLD, group: 'Right Hand' },
 ];
 
 export class InputHandler {

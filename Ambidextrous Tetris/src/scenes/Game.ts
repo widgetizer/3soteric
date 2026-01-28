@@ -17,6 +17,14 @@ export class Game extends Phaser.Scene {
     private p2NextType: TetrominoType = 'I';
     private p1NextPreview!: Phaser.GameObjects.Container;
     private p2NextPreview!: Phaser.GameObjects.Container;
+    private p1HoldPreview!: Phaser.GameObjects.Container;
+    private p2HoldPreview!: Phaser.GameObjects.Container;
+    private holdMode: 'OFF' | 'SHARED' | 'PRIVATE' = 'PRIVATE';
+    private p1HeldPiece: TetrominoType | null = null;
+    private p2HeldPiece: TetrominoType | null = null;
+    private sharedHeldPiece: TetrominoType | null = null;
+    private p1CanHold: boolean = true;
+    private p2CanHold: boolean = true;
     private isPaused: boolean = false;
     private isGameOver: boolean = false;
     private pauseText!: Phaser.GameObjects.Text;
@@ -40,6 +48,16 @@ export class Game extends Phaser.Scene {
         const savedWidth = localStorage.getItem('gridWidth');
         this.gridWidth = savedWidth ? parseInt(savedWidth, 10) : 14;
         this.ghostsEnabled = localStorage.getItem('showGhosts') !== 'false';
+        this.ghostsEnabled = localStorage.getItem('showGhosts') !== 'false';
+        
+        // Load Hold Mode
+        const savedHoldMode = localStorage.getItem('holdMode');
+        this.holdMode = (savedHoldMode as 'OFF' | 'SHARED' | 'PRIVATE') || 'PRIVATE';
+        
+        // Legacy fallback
+        if (!savedHoldMode && localStorage.getItem('enableHold') === 'false') {
+            this.holdMode = 'OFF';
+        }
 
         this.grid = new Grid(this, this.gridWidth, 20);
         this.grid.drawGrid();
@@ -49,7 +67,7 @@ export class Game extends Phaser.Scene {
         this.p1NextType = types[Math.floor(Math.random() * types.length)];
         this.p2NextType = types[Math.floor(Math.random() * types.length)];
 
-        this.createNextPreviews();
+        this.createUIPreviews();
 
         // Spawn Pieces
         this.p1Piece = this.spawnPiece(this.getSpawnX(true, this.p1NextType), 0);
@@ -83,18 +101,50 @@ export class Game extends Phaser.Scene {
             stroke: '#0f172a',
             strokeThickness: 2
         }).setOrigin(1, 0);
+        // Level UI
+        this.levelText = this.add.text(width - 20, 40, 'Level: 1', { 
+            fontFamily: 'Inter',
+            fontSize: '24px', 
+            color: '#fbbf24', // Amber
+            stroke: '#0f172a',
+            strokeThickness: 2
+        }).setOrigin(1, 0);
     }
     
     private totalLines: number = 0;
+    private level: number = 1;
     private linesText!: Phaser.GameObjects.Text;
+    private levelText!: Phaser.GameObjects.Text;
+
+    private getDropInterval(): number {
+        // Classic-ish gravity curve:
+        // Level 1: 1000ms
+        // Level 2: 800ms
+        // ...
+        // Formula: 1000 * (0.8 ^ (level - 1))
+        return Math.max(50, 1000 * Math.pow(0.85, this.level - 1));
+    }
 
     handleInput(action: Action) {
+        // Global Actions
+        if (action === Action.GAME_RESTART) this.restartGame();
+        else if (action === Action.GAME_PAUSE) {
+             if (this.isGameOver) {
+               this.returnToMenu();
+            } else {
+               this.togglePause();
+            }
+        }
+
+        if (this.isPaused || this.isGameOver) return;
+
         // Player 1
         if (action === Action.P1_MOVE_LEFT) this.handleMove(this.p1Piece, this.p2Piece, -1, 0);
         else if (action === Action.P1_MOVE_RIGHT) this.handleMove(this.p1Piece, this.p2Piece, 1, 0);
         else if (action === Action.P1_MOVE_DOWN) this.handleMove(this.p1Piece, this.p2Piece, 0, 1);
         else if (action === Action.P1_ROTATE_CCW) this.p1Piece?.rotate(false, this.p2Piece);
         else if (action === Action.P1_ROTATE_CW) this.p1Piece?.rotate(true, this.p2Piece);
+        else if (action === Action.P1_HOLD) this.handleHold(true);
 
         // Player 2
         else if (action === Action.P2_MOVE_LEFT) this.handleMove(this.p2Piece, this.p1Piece, -1, 0);
@@ -102,16 +152,7 @@ export class Game extends Phaser.Scene {
         else if (action === Action.P2_MOVE_DOWN) this.handleMove(this.p2Piece, this.p1Piece, 0, 1);
         else if (action === Action.P2_ROTATE_CCW) this.p2Piece?.rotate(false, this.p1Piece);
         else if (action === Action.P2_ROTATE_CW) this.p2Piece?.rotate(true, this.p1Piece);
-
-        // Global
-        else if (action === Action.GAME_RESTART) this.restartGame();
-        else if (action === Action.GAME_PAUSE) {
-             if (this.isGameOver) {
-               this.returnToMenu();
-           } else {
-               this.togglePause();
-           }
-        }
+        else if (action === Action.P2_HOLD) this.handleHold(false);
     }
 
     handleMove(mover: ActivePiece | undefined, other: ActivePiece | undefined, dx: number, dy: number) {
@@ -142,7 +183,7 @@ export class Game extends Phaser.Scene {
                         console.log("   B Cells (Current):", JSON.stringify(bCells));
                     } else if (!willCollide) {
                          // Log close calls to verify coordinates
-                         console.log(`Move Safe: P${mover === this.p1Piece ? '1' : '2'} -> (${mover.x + dx}, ${mover.y + dy}) | Other: (${other.x}, ${other.y})`);
+                         // console.log(`Move Safe: P${mover === this.p1Piece ? '1' : '2'} -> (${mover.x + dx}, ${mover.y + dy}) | Other: (${other.x}, ${other.y})`);
                     }
                 }
             }
@@ -193,7 +234,6 @@ export class Game extends Phaser.Scene {
     }
 
     private dropTimer: number = 0;
-    private dropInterval: number = 1000; // 1 second drop speed
 
     update(time: number, delta: number) {
         if (this.isPaused) return;
@@ -204,7 +244,9 @@ export class Game extends Phaser.Scene {
         }
 
         this.dropTimer += delta;
-        if (this.dropTimer >= this.dropInterval) {
+        const interval = this.getDropInterval();
+        
+        if (this.dropTimer >= interval) {
             this.dropTimer = 0;
             if (this.p1Piece) this.applyGravity(this.p1Piece);
             if (this.p2Piece) this.applyGravity(this.p2Piece);
@@ -231,13 +273,29 @@ export class Game extends Phaser.Scene {
         const { linesCleared, animationDuration } = this.grid.placePiece(piece.x, piece.y, piece.getRotatedShape(), piece.color, piece.isRounded);
 
         if (linesCleared > 0) {
-            // Simple scoring
-            this.score += 100 * linesCleared * linesCleared;
+            // Scoring System
+            // Base Tetris scoring (100, 300, 500, 800) for 1, 2, 3, 4 lines
+            // Multiplied by Level
+            const baseScores = [0, 100, 300, 500, 800, 1200, 1600, 2000, 3000]; // Extending for up to 8 lines! 
+            const points = (baseScores[linesCleared] || (linesCleared * 200)) * this.level;
+            
+            this.score += points;
             this.scoreText.setText(`Score: ${this.score}`);
             
             // Update Lines Counter
             this.totalLines += linesCleared;
             this.linesText.setText(`Lines: ${this.totalLines}`);
+            
+            // Level Up Check (every 10 lines)
+            const newLevel = Math.floor(this.totalLines / 10) + 1;
+            if (newLevel > this.level) {
+                this.level = newLevel;
+                this.levelText.setText(`Level: ${this.level}`);
+                this.levelText.setColor('#ffffff'); // Flash white
+                this.time.delayedCall(500, () => this.levelText.setColor('#fbbf24'));
+                
+                // Sound effect?
+            }
         }
 
         // Destroy active piece visual
@@ -247,8 +305,14 @@ export class Game extends Phaser.Scene {
         const isP1 = (piece === this.p1Piece);
 
         // Clear reference immediately so update loop skips it
-        if (isP1) this.p1Piece = undefined;
-        else this.p2Piece = undefined;
+        if (isP1) {
+             this.p1Piece = undefined;
+             this.p1CanHold = true; // Reset hold ability
+        }
+        else {
+             this.p2Piece = undefined;
+             this.p2CanHold = true; // Reset hold ability
+        }
 
         // Respawn new piece with delay if needed
         const spawnDelay = linesCleared > 0 ? animationDuration : 0;
@@ -272,23 +336,27 @@ export class Game extends Phaser.Scene {
         return Math.floor(center - offset);
     }
 
-    spawnPiece(x: number, y: number): ActivePiece {
+    spawnPiece(x: number, y: number, forceType?: TetrominoType): ActivePiece {
         let type: TetrominoType;
 
-        // Random types array
-        const types: TetrominoType[] = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-        const nextType = types[Math.floor(Math.random() * types.length)];
-
-        if (x < this.gridWidth / 2) {
-            // P1
-            type = this.p1NextType;
-            this.p1NextType = nextType;
-            if (this.p1NextPreview) this.updatePreview(this.p1NextPreview, this.p1NextType);
+        if (forceType) {
+            type = forceType;
         } else {
-            // P2
-            type = this.p2NextType;
-            this.p2NextType = nextType;
-            if (this.p2NextPreview) this.updatePreview(this.p2NextPreview, this.p2NextType);
+            // Random types array
+            const types: TetrominoType[] = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+            const nextType = types[Math.floor(Math.random() * types.length)];
+
+            if (x < this.gridWidth / 2) {
+                // P1
+                type = this.p1NextType;
+                this.p1NextType = nextType;
+                if (this.p1NextPreview) this.updatePreview(this.p1NextPreview, this.p1NextType);
+            } else {
+                // P2
+                type = this.p2NextType;
+                this.p2NextType = nextType;
+                if (this.p2NextPreview) this.updatePreview(this.p2NextPreview, this.p2NextType);
+            }
         }
 
         const isRounded = (x < this.gridWidth / 2); // P1 is left side
@@ -323,15 +391,111 @@ export class Game extends Phaser.Scene {
         return piece;
     }
 
-    createNextPreviews() {
+    createUIPreviews() {
+        // Next Piece Previews
+        this.add.text(50, 70, 'NEXT', { fontFamily: 'Outfit', fontSize: '16px', color: '#94a3b8' });
         this.p1NextPreview = this.add.container(50, 100);
-        this.p2NextPreview = this.add.container(650, 100);
-
-        // this.add.text(50, 70, 'P1 Next', { fontSize: '16px', color: '#fff' });
-        // this.add.text(650, 70, 'P2 Next', { fontSize: '16px', color: '#fff' });
+        
+        this.add.text(this.scale.width - 50, 70, 'NEXT', { fontFamily: 'Outfit', fontSize: '16px', color: '#94a3b8' }).setOrigin(1, 0);
+        this.p2NextPreview = this.add.container(this.scale.width - 80, 100);
 
         this.updatePreview(this.p1NextPreview, this.p1NextType);
         this.updatePreview(this.p2NextPreview, this.p2NextType);
+
+        // Hold Piece Previews
+        if (this.holdMode === 'OFF') return;
+
+        if (this.holdMode === 'SHARED') {
+            const centerX = this.scale.width / 2;
+            const centerY = 100;
+            this.add.text(centerX, centerY - 30, 'SHARED HOLD', { fontFamily: 'Outfit', fontSize: '16px', color: '#a855f7' }).setOrigin(0.5);
+            
+            // Create a single container for shared hold
+            // We use p1HoldPreview as the primary reference for shared mode interaction
+            this.p1HoldPreview = this.add.container(centerX - 30, centerY); // Center the 3-4 block wide piece approx
+            this.p2HoldPreview = this.p1HoldPreview; // Alias it for safety
+            
+        } else {
+            // PRIVATE MODE
+            this.add.text(50, 200, 'HOLD', { fontFamily: 'Outfit', fontSize: '16px', color: '#94a3b8' });
+            this.p1HoldPreview = this.add.container(50, 230);
+
+            this.add.text(this.scale.width - 50, 200, 'HOLD', { fontFamily: 'Outfit', fontSize: '16px', color: '#94a3b8' }).setOrigin(1, 0);
+            this.p2HoldPreview = this.add.container(this.scale.width - 80, 230);
+        }
+    }
+
+    handleHold(isP1: boolean) {
+        if (this.holdMode === 'OFF' || this.isPaused || this.isGameOver) return;
+
+        const piece = isP1 ? this.p1Piece : this.p2Piece;
+        const canHold = isP1 ? this.p1CanHold : this.p2CanHold;
+
+        if (!piece || !canHold) return;
+
+        const currentType = piece.type;
+        
+        // Determine which storage to use
+        let heldType: TetrominoType | null = null;
+        if (this.holdMode === 'SHARED') {
+            heldType = this.sharedHeldPiece;
+        } else {
+             heldType = isP1 ? this.p1HeldPiece : this.p2HeldPiece;
+        }
+
+        // Destroy current piece
+        piece.destroy();
+
+        let newPiece: ActivePiece;
+        // If grabbing from hold, we spawn AT the hand's location.
+        // It should adopt the hand's visual style.
+        const spawnX = this.getSpawnX(isP1, heldType || currentType); 
+
+        if (heldType) {
+            // Swap
+            // Piece coming OUT of hold is heldType. It goes to current player.
+            newPiece = this.spawnPiece(spawnX, 0, heldType);
+            
+            // Piece going INTO hold is currentType.
+            if (this.holdMode === 'SHARED') this.sharedHeldPiece = currentType;
+            else if (isP1) this.p1HeldPiece = currentType;
+            else this.p2HeldPiece = currentType;
+        } else {
+            // First hold (Empty Slot)
+            // Piece going INTO hold is currentType.
+            if (this.holdMode === 'SHARED') this.sharedHeldPiece = currentType;
+            else if (isP1) this.p1HeldPiece = currentType;
+            else this.p2HeldPiece = currentType;
+
+            // Spawn next piece
+            const nextType = isP1 ? this.p1NextType : this.p2NextType;
+            const nextX = this.getSpawnX(isP1, nextType);
+            newPiece = this.spawnPiece(nextX, 0);
+        }
+
+        // Update State
+        if (isP1) {
+            this.p1Piece = newPiece;
+            this.p1CanHold = false;
+        } else {
+            this.p2Piece = newPiece;
+            this.p2CanHold = false;
+        }
+        
+        // Update UI
+        // In SHARED mode, the preview needs to be drawn. 
+        // We need to decide a style for the shared preview. 
+        // Maybe neutral? Or just sharp? Or maybe it retains the color?
+        // Let's use Sharp (false) for Shared preview generally, or maybe match the last depositor?
+        // Let's just default to Sharp for the Shared Preview container itself for simplicity,
+        // unless we want to track who put it there.
+        // Actually, updatePreview() checks container identity to decide rounding.
+        if (this.holdMode === 'SHARED') {
+            this.updatePreview(this.p1HoldPreview, this.sharedHeldPiece!);
+        } else {
+            if (isP1) this.updatePreview(this.p1HoldPreview, this.p1HeldPiece!);
+            else this.updatePreview(this.p2HoldPreview, this.p2HeldPiece!);
+        }
     }
 
     updatePreview(container: Phaser.GameObjects.Container, type: TetrominoType) {
@@ -341,7 +505,15 @@ export class Game extends Phaser.Scene {
         const color = def.color;
         const rows = shape.length;
         const cols = shape[0].length;
-        const isRounded = (container === this.p1NextPreview); // P1 is rounded
+        let isRounded = (container === this.p1NextPreview || container === this.p1HoldPreview); // P1 is rounded
+        
+        // Exception: If in SHARED mode, the p1HoldPreview is used for the shared block.
+        // We can choose a visual style. Let's make it sharp (standard) or perhaps we want it to reflect the last user?
+        // For now, let's keep it consistent. If it's valid to be rounded, fine.
+        // Actually, if we want to differentiate, let's make it sharp. 
+        if (this.holdMode === 'SHARED' && container === this.p1HoldPreview) {
+            isRounded = false; 
+        }
         const blockSize = 20; // Exact fit for 20px spacing (was 18)
 
         for (let r = 0; r < rows; r++) {
@@ -419,5 +591,3 @@ export class Game extends Phaser.Scene {
         }
     }
 }
-
-

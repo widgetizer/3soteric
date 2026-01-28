@@ -35,8 +35,18 @@ export class GraphicsUtils {
              // Realistic Style: Tighter bevels, subtle double-highlight
              const shadowInset = 1.5; // Very thin, sleek shadow rim
              
-             // Helper to get corners
-             const getCorners = (r: number) => {
+             // Helper to get corners with Inner Fillet support
+             const getSmartCorners = (r: number) => {
+                 return {
+                     tl: (neighbors.top && neighbors.left) || (!neighbors.top && !neighbors.left) ? r : 0,
+                     tr: (neighbors.top && neighbors.right) || (!neighbors.top && !neighbors.right) ? r : 0,
+                     bl: (neighbors.bottom && neighbors.left) || (!neighbors.bottom && !neighbors.left) ? r : 0,
+                     br: (neighbors.bottom && neighbors.right) || (!neighbors.bottom && !neighbors.right) ? r : 0
+                 };
+             };
+             
+             // Standard outer-only corners for Body (Layer 2) to ensure full coverage
+             const getOuterCorners = (r: number) => {
                  return {
                      tl: (!neighbors.top && !neighbors.left) ? r : 0,
                      tr: (!neighbors.top && !neighbors.right) ? r : 0,
@@ -47,7 +57,7 @@ export class GraphicsUtils {
 
              // --- Layer 1: Shadow / Base (Full Size) ---
              g.fillStyle(colorBR, 1);
-             g.fillRoundedRect(x - half, y - half, size, size, getCorners(radius));
+             g.fillRoundedRect(x - half, y - half, size, size, getOuterCorners(radius));
 
              // --- Layer 2: Main Body (Inset from Bottom & Right) ---
              g.fillStyle(color, 1);
@@ -60,7 +70,7 @@ export class GraphicsUtils {
                  y - half, 
                  size - insetRight, 
                  size - insetBottom, 
-                 getCorners(radius)
+                 getOuterCorners(radius)
              );
 
              // --- Layer 3: Soft Ambient Highlight (Broad) ---
@@ -72,16 +82,19 @@ export class GraphicsUtils {
              const ambRight = neighbors.right ? 0 : ambInset * 2;
              const ambBottom = neighbors.bottom ? 0 : ambInset * 2;
 
-             g.fillRoundedRect(
-                 (x - half) + ambLeft,
-                 (y - half) + ambTop,
-                 size - ambLeft - ambRight,
-                 size - ambTop - ambBottom,
-                 getCorners(Math.max(0, radius - ambInset))
-             );
+             // Custom shape for Ambient Layer to handle inner curves
+             g.beginPath();
+             const AL = (x - half) + ambLeft;
+             const AT = (y - half) + ambTop;
+             const AR = (x + half) - ambRight;
+             const AB = (y + half) - ambBottom;
+             const ARad = Math.max(0, radius - ambInset);
+
+             // Use Smart Corners for Ambient to match Specular
+             g.fillRoundedRect(AL, AT, AR - AL, AB - AT, getSmartCorners(ARad));
 
              // --- Layer 4: Specular Highlight (Sharp, Inner) ---
-             // Mimics glossy plastic reflection
+             // This is the "Blue Stripe". We want it to curve on inner elbows.
              g.fillStyle(0xffffff, 0.25);
              const specInset = 6; // Further in
              
@@ -90,13 +103,13 @@ export class GraphicsUtils {
              const specRight = neighbors.right ? 0 : specInset * 1.5;
              const specBottom = neighbors.bottom ? 0 : specInset * 1.5;
 
-             g.fillRoundedRect(
-                 (x - half) + specLeft,
-                 (y - half) + specTop,
-                 size - specLeft - specRight,
-                 size - specTop - specBottom,
-                 getCorners(Math.max(0, radius - specInset))
-             );
+             const SL = (x - half) + specLeft;
+             const ST = (y - half) + specTop;
+             const SW = size - specLeft - specRight;
+             const SH = size - specTop - specBottom;
+             const SRad = Math.max(0, radius - specInset);
+
+             g.fillRoundedRect(SL, ST, SW, SH, getSmartCorners(SRad));
 
         } else {
              // Basic Square - Gradient looks great here
@@ -111,8 +124,7 @@ export class GraphicsUtils {
         y: number,
         size: number,
         neighbors: { top: boolean; bottom: boolean; left: boolean; right: boolean } | null,
-        isRounded: boolean,
-        isSpooky: boolean = false
+        isRounded: boolean
     ) {
         const radius = isRounded ? size * 0.36 : 0;
         const half = size / 2;
@@ -122,9 +134,9 @@ export class GraphicsUtils {
         const B = y + half;
 
         // Spooky colors: Purple tint
-        const ghostColor = isSpooky ? 0xa855f7 : 0xffffff;
-        const fillAlpha = isSpooky ? 0.2 : 0.1;
-        const strokeAlpha = isSpooky ? 0.6 : 0.35;
+        const ghostColor = 0xffffff;
+        const fillAlpha = 0.1;
+        const strokeAlpha = 0.35;
 
         const corners = {
             tl: (neighbors && !neighbors.top && !neighbors.left) ? radius : 0,
@@ -176,11 +188,6 @@ export class GraphicsUtils {
             }
         }
 
-        // --- Spooky Mode (Eyes) ---
-        if (isSpooky && (!neighbors || !neighbors.top)) {
-            g.fillStyle(0x000000, 0.4);
-            g.fillCircle(x - 5, y - 2, 2.5);
-            g.fillCircle(x + 5, y - 2, 2.5);
-        }
+
     }
 }
